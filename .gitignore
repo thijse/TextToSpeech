@@ -1,6 +1,9 @@
 # Specific for this project
 config.yaml
+voices.txt
 
+# Generic
+*.bak
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

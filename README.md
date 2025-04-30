@@ -1,30 +1,35 @@
 # Multi-Backend Text-to-Speech Generator
 
-A flexible application and library that converts text in different formats to speech using multiple TTS backends. The application features:
+A flexible Python application and library that converts text in different formats to speech using multiple TTS backends. The application features:
 
-- **Multiple TTS Backends**: Support for both ElevenLabs and Azure Speech Services
 - **Markdown to Speech**: Process markdown documents with a custom dialect that maps sections to separate audio files
 - **PowerPoint to Speech**: Extract PowerPoint notes, convert them to Markdown, and then to speech
-- **Configuration-Driven**: All settings controlled through a single YAML configuration file
+- **Multiple TTS Backends**: Support for both ElevenLabs and Azure Speech Services
+- **Configuration-Driven**: All settings configured through a YAML configuration file
 
 ## Setup
 
 1. Create a virtual environment:
+
    ```
    python -m venv .venv
    ```
 
 2. Activate the virtual environment:
    - Windows:
+
      ```
      .venv\Scripts\activate
      ```
+
    - macOS/Linux:
+
      ```
      source .venv/bin/activate
      ```
 
 3. Install dependencies:
+
    ```
    pip install -r requirements.txt
    ```
@@ -38,23 +43,69 @@ A flexible application and library that converts text in different formats to sp
 ## Usage
 
 Run the application:
+
 ```
 python main.py
 ```
 
+The application supports several command-line options:
+
+1. **Select TTS service**:
+
+   ```
+   python main.py --service elevenlabs  # Use ElevenLabs TTS
+   python main.py --service azure       # Use Azure Speech Service
+   ```
+
+2. **Process PowerPoint files**:
+
+   ```
+   python main.py --ppt "path/to/presentation.pptx" "VoiceName"
+   ```
+
+   You can also use these additional options:
+
+   ```
+   python main.py --ppt "path/to/presentation.pptx" --no-titles        # Skip slide titles in section headers
+   python main.py --ppt "path/to/presentation.pptx" --overwrite-script  # Regenerate the Markdown script
+   python main.py --ppt "path/to/presentation.pptx" --overwrite-audio   # Regenerate all audio files
+   python main.py --service azure --ppt "path/to/presentation.pptx"     # Process with Azure TTS
+   ```
+
+   **Note**: By default, the application:
+   - Uses existing Markdown script if available
+   - Only generates audio files that don't already exist
+   - This allows you to delete specific audio files to regenerate only those, while keeping others
+
+2. **Save available voices to a file**:
+
+   ```
+   python main.py --voices "output_filename.txt"
+   ```
+
+   If no filename is provided, it defaults to "voices.txt":
+
+   ```
+   python main.py --voices
+   ```
+
+3. **Display usage information**:
+
+   ```
+   python main.py --help
+   ```
+
+   This will display usage information and examples for all available commands.
+
+4. **Run in interactive mode**:
+
+   ```
+   python main.py
+   ```
+
+   This will display usage information and prompt to continue to interactive mode.
+
 This will fetch and display a list of all available voices from the ElevenLabs API.
-
-## Project Structure
-
-- `config.yaml`: Configuration file for all TTS services and output settings
-- `tts_interface.py`: Interface that all TTS implementations must follow
-- `tts_elevenlabs.py`: ElevenLabs implementation of the TTS interface
-- `tts_azure.py`: Azure Speech Service implementation of the TTS interface
-- `modality_to_speech.py`: Handles converting different modalities (Markdown, PowerPoint) to speech
-- `markdown_parser.py`: Parser for Markdown documents with custom file annotations
-- `ppt_processor.py`: Processor for PowerPoint presentations
-- `main.py`: Main application with CLI interface
-- `requirements.txt`: List of Python dependencies
 
 ## Features
 
@@ -120,6 +171,7 @@ tts_client.text_to_speech(
 ```
 
 ### PowerPoint Processing
+
 The application can extract notes from PowerPoint presentations and convert them to speech using any TTS backend:
 
 ```python
@@ -141,6 +193,7 @@ modality_processor.process_powerpoint(
 ```
 
 This will:
+
 1. Create an output directory as a subdirectory of where the PowerPoint is located
    - The subdirectory name is the sanitized version (spaces to underscores) of the PowerPoint filename
 2. Extract notes from each slide in the PowerPoint
@@ -153,57 +206,11 @@ This will:
 5. Process the Markdown document to generate audio files
 6. Save the audio files to the output directory
 
-#### Command Line Usage
+### Markdown Processing for sectioned text
 
-The application supports several command-line options:
-
-1. **Select TTS service**:
-   ```
-   python main.py --service elevenlabs  # Use ElevenLabs TTS
-   python main.py --service azure       # Use Azure Speech Service
-   ```
-
-2. **Process PowerPoint files**:
-   ```
-   python main.py --ppt "path/to/presentation.pptx" "VoiceName"
-   ```
-   
-   You can also use these additional options:
-   ```
-   python main.py --ppt "path/to/presentation.pptx" --no-titles        # Skip slide titles in section headers
-   python main.py --ppt "path/to/presentation.pptx" --overwrite-script  # Regenerate the Markdown script
-   python main.py --ppt "path/to/presentation.pptx" --overwrite-audio   # Regenerate all audio files
-   python main.py --service azure --ppt "path/to/presentation.pptx"     # Process with Azure TTS
-   ```
-   
-   **Note**: By default, the application:
-   - Uses existing Markdown script if available
-   - Only generates audio files that don't already exist
-   - This allows you to delete specific audio files to regenerate only those, while keeping others
-
-2. **Save available voices to a file**:
-   ```
-   python main.py --voices "output_filename.txt"
-   ```
-   If no filename is provided, it defaults to "voices.txt":
-   ```
-   python main.py --voices
-   ```
-
-3. **Display usage information**:
-   ```
-   python main.py --help
-   ```
-   This will display usage information and examples for all available commands.
-
-4. **Run in interactive mode**:
-   ```
-   python main.py
-   ```
-   This will display usage information and prompt to continue to interactive mode.
-
-### Markdown Processing for Audiobooks
 The application supports a custom Markdown format that allows you to define sections that should be saved as separate audio files, with optional voice selection and automatic file name generation:
+
+Example:
 
 ```markdown
 # My Audiobook
@@ -272,25 +279,31 @@ modality_processor.process_markdown_document(
 - **Flexible syntax**: Parameters can be separated by spaces or commas: `{file=output.mp3, voice=Aria}` or `{file=output.mp3 voice=Aria}`
 
 This will:
+
 1. Parse the Markdown document
 2. Extract sections with file annotations
 3. Generate audio for each section
 4. Save the audio files to the specified paths
 
-#### Available Output Formats
-- `mp3_44100_128` (default) - MP3 at 44.1kHz, 128kbps
-- `mp3_44100_192` - MP3 at 44.1kHz, 192kbps (higher quality)
-- `mp3_44100_64` - MP3 at 44.1kHz, 64kbps (smaller file size)
-- `mp3_44100_32` - MP3 at 44.1kHz, 32kbps (smallest file size)
-- `mp3_22050_32` - MP3 at 22.05kHz, 32kbps
-- And various other formats including PCM, OPUS, etc.
+## Project Structure
+
+- `config.yaml`: Configuration file for all TTS services and output settings
+- `tts_interface.py`: Interface that all TTS implementations must follow
+- `tts_elevenlabs.py`: ElevenLabs implementation of the TTS interface
+- `tts_azure.py`: Azure Speech Service implementation of the TTS interface
+- `modality_to_speech.py`: Handles converting different modalities (Markdown, PowerPoint) to speech
+- `markdown_parser.py`: Parser for Markdown documents with custom file annotations
+- `ppt_processor.py`: Processor for PowerPoint presentations
+- `main.py`: Main application with CLI interface
+- `requirements.txt`: List of Python dependencies
 
 ## Future Enhancements
 
-This implementation includes support for ElevenLabs and Azure TTS backends, but can be extended with:
+This implementation includes support for ElevenLabs and Azure TTS backends, but may be  be extended with:
+
+- Switching of voices within single section
+- LLM integration to rewrite text for optimal speech creation
 - Additional TTS backends (Google Cloud TTS, Amazon Polly, etc.)
 - Voice customization and fine-tuning
-- Advanced audio settings (stability, clarity, etc.)
 - Batch processing for multiple files
-- Web-based user interface
-- SSML support for more precise control over speech synthesis
+- More explicit SSML support for more precise control over speech synthesis
