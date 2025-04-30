@@ -1,0 +1,67 @@
+# sample configuration: fill in key(s) and rename to config.yaml
+
+# default TTS Service Selection (can be changed in command line)
+tts_service: "azure"  # Options: "elevenlabs", "azure"
+
+# ElevenLabs Configuration
+elevenlabs:
+  api_key: "<ElevenLabs key>"
+  voice_name: "Sarah"  # Default voice name, can be changed
+  model_id: "eleven_monolingual_v1"  # Model ID options:
+  # - eleven_monolingual_v1 (English only, faster)
+  # - eleven_multilingual_v1 (Multiple languages)
+  # - eleven_multilingual_v2 (Improved multilingual)
+  # - eleven_turbo_v2 (Fastest, slightly lower quality)
+  
+  # Voice options examples:
+  # - Sarah (EXAVITQu4vr4xnSDxMaL)
+  # - Aria (9BWtsMINqrJLrRacOk9x)
+  # - Roger (CwhRBWXzGAHq8TQ4Fs17)
+  # - Laura (FGY2WhTYpPnrIDTdsKH5)
+  # - Charlie (IKne3meq5aSn9XLyUdCD)
+  # - George (JBFqnCBsd6RMkjVDRZzb)
+  # - Callum (N2lVS1w4EtoT3dr4eOWO)
+  # - River (SAz9YHcvj6GT2YYXdXww)
+  # - Liam (TX3LPaxmHKxFdv7VOQHJ)
+  # - Charlotte (XB0fDUnXU5powFXDhCwa)
+  # - Alice (Xb7hH8MSUJpSbSDYk0k2)
+  # - Matilda (XrExE9yKIg1WjnnlVkGX)
+  # - Will (bIHbv24MWmeRgasZH58o)
+  # - Jessica (cgSgspJ2msm6clMCkdW9)
+  # - Andrew (gUABw7pXQjhjt0kNFBTF - Smooth audio books)
+  # - Ana-Rita (wJqPPQ618aTW29mptyoc - British Female for Book Narration)
+  
+
+# Azure Speech Service Configuration
+azure:
+  api_key: "<Azure API key>"  
+  region: "<Region>"  # Azure region options: westus, eastus, westeurope, northeurope, etc.
+  voice_name: "en-GB-AdaMultilingualNeural"  # Default voice name
+  
+  # Voice options examples:
+  # - en-GB-AdaMultilingualNeural (British English, female)
+  # - en-GB-OllieMultilingualNeural (British English, male)
+  # - en-US-AndrewMultilingualNeural (American English, male)
+  # - en-US-AlloyTurboMultilingualNeural (American English, male, high performance)
+  # - en-US-NovaTurboMultilingualNeural (American English, female, high performance)
+  # - en-US-AvaMultilingualNeural (American English, female)
+  # - en-US-CoraMultilingualNeural (American English, female)
+  # - en-US-Ava:DragonHDLatestNeural (American English, female, high quality)
+  # - nl-NL-FennaNeural (Dutch, female)
+  # - nl-NL-MaartenNeural (Dutch, male) 
+  # - en-AU-NatashaNeural (Australian English, female)
+  # - de-DE-KatjaNeural (German, female)
+  # - fr-FR-DeniseNeural (French, female)
+  # - es-ES-ElviraNeural (Spanish, female)
+
+# Output Configuration
+output:
+  format: "mp3"  # Output format options: mp3, wav, ogg, webm
+  quality: "high"  # Quality options: high, medium, low
+  # Format and quality combinations:
+  # - mp3 + high: 24KHz, 160Kbps
+  # - mp3 + medium: 24KHz, 96Kbps
+  # - mp3 + low: 24KHz, 48Kbps
+  # - wav: 24KHz, 16-bit PCM
+  # - ogg: 24KHz, 16-bit Opus
+  # - webm: 24KHz, 16-bit Opus

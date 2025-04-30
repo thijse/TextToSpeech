@@ -1,0 +1,6 @@
+elevenlabs
+requests
+python-dotenv
+python-pptx
+azure-cognitiveservices-speech
+pyyaml
