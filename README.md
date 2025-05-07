@@ -77,7 +77,68 @@ The application supports several command-line options:
    - Only generates audio files that don't already exist
    - This allows you to delete specific audio files to regenerate only those, while keeping others
 
-2. **Save available voices to a file**:
+3. **Process Markdown files directly**:
+
+   ```
+   python main.py --md "path/to/document.md" "VoiceName"
+   ```
+
+   You can also use these additional options:
+
+   ```
+   python main.py --md "path/to/document.md" --overwrite-audio   # Regenerate all audio files
+   python main.py --md "path/to/document.md" --output-dir ./output  # Specify output directory
+   python main.py --service azure --md "path/to/document.md"     # Process with Azure TTS
+   ```
+
+   This allows you to directly convert Markdown files to speech without going through PowerPoint first.
+
+4. **Test multiple voices with the same text**:
+
+   ```
+   python main.py --test-voices "text_file.txt" "voice_list_file.txt"
+   ```
+
+   This command reads text from a file and processes it with multiple voices listed in another file.
+   
+   You can also specify an output directory:
+
+   ```
+   python main.py --test-voices "text_file.txt" "voice_list_file.txt" --output-dir ./voice_samples
+   ```
+
+   The voice list file should contain one voice ID per line. Lines can include comments starting with `#`:
+
+   ```
+   en-US-JennyNeural # American female voice
+   en-GB-SoniaNeural # British female voice
+   # This line is a comment and will be ignored
+   en-AU-NatashaNeural # Australian female voice
+   ```
+
+   This is useful for comparing how different voices sound when reading the same text.
+
+5. **Export voices in a concise format**:
+
+   ```
+   python main.py --voices-short "output_filename.txt"
+   ```
+
+   If no filename is provided, it defaults to "voices_short.txt":
+
+   ```
+   python main.py --voices-short
+   ```
+
+   This exports all available voices in a concise format (one line per voice):
+
+   ```
+   voice-id # category, locale, gender
+   ```
+
+   The output of this command can be used as input for the `--test-voices` command.
+
+6. **Save detailed voice information to a file**:
 
    ```
    python main.py --voices "output_filename.txt"
@@ -89,7 +150,7 @@ The application supports several command-line options:
    python main.py --voices
    ```
 
-3. **Display usage information**:
+7. **Display usage information**:
 
    ```
    python main.py --help
@@ -97,7 +158,7 @@ The application supports several command-line options:
 
    This will display usage information and examples for all available commands.
 
-4. **Run in interactive mode**:
+8. **Run in interactive mode**:
 
    ```
    python main.py
@@ -276,6 +337,8 @@ modality_processor.process_markdown_document(
 - **Automatic file name generation**: If no file name is specified, one is generated from the section hierarchy
   - Example: `# Section Name` → `section_name.mp3`
   - Example: `# Section Name` → `## Subsection Name` → `section_name_subsection_name.mp3`
+  - Example: `# Chapter 1` → `chapter_1.mp3` (numbers are preserved in filenames)
+  - Example: `# Section 2.3: Advanced Topics` → `section_2_3_advanced_topics.mp3`
 - **Flexible syntax**: Parameters can be separated by spaces or commas: `{file=output.mp3, voice=Aria}` or `{file=output.mp3 voice=Aria}`
 
 This will:
