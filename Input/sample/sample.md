@@ -1,5 +1,7 @@
 # sample
 
+[voice:en-US-JennyNeural]
+
 ## Slide 1 - Basic presentation
 
 Basic presentation starter slide

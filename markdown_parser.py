@@ -1,157 +1,146 @@
 """
 Markdown Parser Module
 
-This module provides functionality to parse Markdown documents with custom file annotations
-and process them for text-to-speech conversion.
+This module provides functionality to parse Markdown documents with alias and inline voice tags
+for text-to-speech conversion.
 """
 
-import os
 import re
 from typing import List, Dict, Tuple, Optional
+
+
+class VoiceSegment:
+    """
+    Represents a segment of text with a specific voice.
+    """
+    def __init__(self, voice: str, text: str):
+        self.voice = voice  # Alias or direct voice name
+        self.text = text
+
+    def __str__(self):
+        return f"[{self.voice}] {self.text[:40]}..."
 
 
 class MarkdownSection:
     """
     Represents a section in a Markdown document.
     """
-    
-    def __init__(self, title: str, content: str, file_path: Optional[str] = None, voice_name: Optional[str] = None):
-        """
-        Initialize a Markdown section.
-        
-        Args:
-            title (str): The title of the section.
-            content (str): The content of the section.
-            file_path (str, optional): The file path where the audio should be saved.
-            voice_name (str, optional): The name of the voice to use for this section.
-        """
+    def __init__(self, title: str, file_path: str, segments: List[VoiceSegment]):
         self.title = title
-        self.content = content
         self.file_path = file_path
-        self.voice_name = voice_name
-    
-    def __str__(self) -> str:
-        """
-        String representation of the section.
-        """
-        voice_info = f", Voice: {self.voice_name}" if self.voice_name else ""
-        return f"Section: {self.title}\nFile: {self.file_path}{voice_info}\nContent: {self.content[:50]}..."
+        self.segments = segments  # List[VoiceSegment]
+
+    def __str__(self):
+        segs = "\n".join(str(s) for s in self.segments)
+        return f"Section: {self.title}\nFile: {self.file_path}\nSegments:\n{segs}"
 
 
 class MarkdownParser:
     """
-    Parser for Markdown documents with custom file annotations.
+    Parser for Markdown documents with alias and inline voice tags.
     """
-    
     def __init__(self):
-        """
-        Initialize the Markdown parser.
-        """
-        # Regex pattern to match headings with file and voice annotations
-        # Examples: 
-        # ## Section Title {file=output.mp3}
-        # ## Section Title {file=output.mp3, voice=Aria}
-        # ## Section Title {file=output.mp3 voice=Aria}
-        self.heading_pattern = re.compile(r'^(#+)\s+(.*?)(?:\s+\{(.*?)\})?$', re.MULTILINE)
-        
-        # Regex patterns to extract parameters from the annotation
-        self.file_pattern = re.compile(r'file=(.*?)(?:,|\s|$)')
-        self.voice_pattern = re.compile(r'voice=(.*?)(?:,|\s|$)')
-    
+        # Match headers (e.g., ## Slide 1)
+        self.heading_pattern = re.compile(r'^(#+)\s+(.*)$', re.MULTILINE)
+        # Match alias definitions (e.g., [alias:John=Aria])
+        self.alias_pattern = re.compile(r'\[alias:([A-Za-z0-9_]+)=([A-Za-z0-9_\-]+)\]')
+        # Match voice switches (e.g., [voice:John] or [voice:Aria])
+        self.voice_pattern = re.compile(r'\[voice:([A-Za-z0-9_\\-]+)\]')
+
     def generate_filename_from_title(self, title: str) -> str:
-        """
-        Generate a filename from a section title by removing special characters and replacing spaces with underscores.
-        
-        Args:
-            title (str): The section title.
-            
-        Returns:
-            str: A sanitized filename.
-        """
-        # Remove special characters and replace spaces with underscores
         filename = re.sub(r'[^\w\s-]', '', title).strip().lower()
         filename = re.sub(r'[-\s]+', '_', filename)
         return filename + ".mp3"
-    
-    def parse(self, markdown_text: str) -> List[MarkdownSection]:
+
+    def extract_aliases(self, markdown_text: str) -> Dict[str, str]:
         """
-        Parse a Markdown document and extract sections with file annotations.
-        If no file annotation is provided, generate a filename from the section title.
-        
-        Args:
-            markdown_text (str): The Markdown document text.
-            
-        Returns:
-            List[MarkdownSection]: A list of parsed sections.
+        Extract alias definitions from the markdown text before the first section header (## or higher).
         """
-        # Find all headings with their positions
-        headings = []
-        for match in self.heading_pattern.finditer(markdown_text):
-            level = len(match.group(1))  # Number of # characters
-            title = match.group(2).strip()
-            annotation = match.group(3) if match.group(3) else None
-            position = match.start()
-            
-            # Extract file path and voice name from the annotation
-            file_path = None
-            voice_name = None
-            if annotation:
-                file_match = self.file_pattern.search(annotation)
-                if file_match:
-                    file_path = file_match.group(1).strip()
-                
-                voice_match = self.voice_pattern.search(annotation)
-                if voice_match:
-                    voice_name = voice_match.group(1).strip()
-            
-            headings.append((level, title, file_path, voice_name, position))
+        aliases = {}
+        # Only look before the first section header (## or higher)
+        # We need to skip the title (# Title) and look for section headers (## Section)
+        section_header_pattern = re.compile(r'^(#{2,})\s+(.*)$', re.MULTILINE)
+        first_section = section_header_pattern.search(markdown_text)
         
-        # Extract content between headings
+        # If there's no section header, search the entire document
+        search_text = markdown_text[:first_section.start()] if first_section else markdown_text
+        
+        for match in self.alias_pattern.finditer(search_text):
+            alias, voice = match.group(1), match.group(2)
+            aliases[alias] = voice
+        
+        return aliases
+
+    def parse_sections(self, markdown_text: str) -> List[Tuple[str, int, int]]:
+        """
+        Find all section headers and their positions.
+        Returns a list of (title, start_pos, end_pos).
+        """
+        matches = list(self.heading_pattern.finditer(markdown_text))
         sections = []
-        
-        # Keep track of parent sections for nested headings
-        section_hierarchy = {}  # level -> title
-        
-        for i, (level, title, file_path, voice_name, position) in enumerate(headings):
-            # Get content until the next heading or end of text
-            if i < len(headings) - 1:
-                next_position = headings[i + 1][4]  # Position is now at index 4
-                content = markdown_text[position:next_position]
-            else:
-                content = markdown_text[position:]
-            
-            # Remove the heading line itself from the content
-            content = content.split('\n', 1)[1] if '\n' in content else ''
-            
-            # Update section hierarchy
-            section_hierarchy[level] = title
-            
-            # Generate file path if not provided
-            if not file_path:
-                # Build the full section path based on hierarchy
-                section_path = []
-                for l in range(1, level + 1):
-                    if l in section_hierarchy:
-                        section_path.append(section_hierarchy[l])
-                
-                # Generate filename from the section path
-                file_path = self.generate_filename_from_title("_".join(section_path))
-            
-            # Add the section
-            sections.append(MarkdownSection(title, content.strip(), file_path, voice_name))
-        
+        for i, match in enumerate(matches):
+            title = match.group(2).strip()
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(markdown_text)
+            sections.append((title, start, end))
         return sections
 
+    def split_into_voice_segments(self, text: str, aliases: Dict[str, str]) -> List[VoiceSegment]:
+        """
+        Split text into segments based on [voice:...] tags.
+        Each segment is assigned the corresponding voice (alias resolved if needed).
+        """
+        segments = []
+        pos = 0
+        current_voice = None
+        for match in self.voice_pattern.finditer(text):
+            voice = match.group(1)
+            # Add previous segment if any
+            if pos < match.start():
+                if current_voice is not None:
+                    segment_text = text[pos:match.start()].strip()
+                    if segment_text:
+                        segments.append(VoiceSegment(current_voice, segment_text))
+            # Update current voice (resolve alias if present)
+            current_voice = aliases.get(voice, voice)
+            pos = match.end()
+        # Add the last segment
+        if current_voice is not None and pos < len(text):
+            segment_text = text[pos:].strip()
+            if segment_text:
+                segments.append(VoiceSegment(current_voice, segment_text))
+        return segments
 
-def process_markdown(markdown_text: str) -> List[MarkdownSection]:
+    def parse(self, markdown_text: str) -> Tuple[Dict[str, str], List[MarkdownSection]]:
+        """
+        Parse the markdown document and extract alias definitions and sections with voice segments.
+        Returns (aliases, sections).
+        """
+        aliases = self.extract_aliases(markdown_text)
+        sections = []
+        for title, start, end in self.parse_sections(markdown_text):
+            section_text = markdown_text[start:end].strip()
+            # Only process if there is at least one [voice:...] tag in the section
+            if not self.voice_pattern.search(section_text):
+                continue
+            # Generate file path from title
+            file_path = self.generate_filename_from_title(title)
+            # Split into voice segments
+            segments = self.split_into_voice_segments(section_text, aliases)
+            if segments:
+                sections.append(MarkdownSection(title, file_path, segments))
+        return aliases, sections
+
+
+def process_markdown(markdown_text: str) -> Tuple[Dict[str, str], List[MarkdownSection]]:
     """
-    Process a Markdown document and extract sections with file annotations.
-    
+    Process a Markdown document and extract alias definitions and sections with voice segments.
+
     Args:
         markdown_text (str): The Markdown document text.
-        
+
     Returns:
-        List[MarkdownSection]: A list of parsed sections.
+        Tuple[Dict[str, str], List[MarkdownSection]]: (aliases, sections)
     """
     parser = MarkdownParser()
     return parser.parse(markdown_text)

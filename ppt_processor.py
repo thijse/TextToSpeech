@@ -101,12 +101,12 @@ class PowerPointProcessor:
                 else:
                     section_header = f"## Slide {slide_number}"
                 
+                markdown_lines.append(section_header + "\n")
+                
                 # Add voice annotation to the first slide with notes
                 if first_slide_with_notes and default_voice_name:
-                    section_header += f" {{voice={default_voice_name}}}"
+                    markdown_lines.append(f"[voice:{default_voice_name}]\n")
                     first_slide_with_notes = False
-                
-                markdown_lines.append(section_header + "\n")
                 
                 # Add notes text or a placeholder
                 if notes_text:
