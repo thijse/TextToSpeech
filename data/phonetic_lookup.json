@@ -1,0 +1,16 @@
+{
+  "hello": {
+    "word": "hello",
+    "phonetic": "hɛllɔ",
+    "source": "recorded",
+    "confidence": 1.0,
+    "created_date": "2025-08-25T22:51:23.340947"
+  },
+  "ivus": {
+    "word": "ivus",
+    "phonetic": "ɪfhʊs",
+    "source": "recorded",
+    "confidence": 1.0,
+    "created_date": "2025-08-25T23:36:32.424299"
+  }
+}

@@ -6,70 +6,161 @@ A flexible Python application and library that converts text in different format
 - **PowerPoint to Speech**: Extract PowerPoint notes, convert them to Markdown, and then to speech
 - **Multiple TTS Backends**: Support for both ElevenLabs and Azure Speech Services
 - **Configuration-Driven**: All settings configured through a YAML configuration file
+- **Easy Installation**: Modern Python package with simple CLI commands (`tts`, `phonetics`)
+- **No PYTHONPATH Required**: Properly packaged for seamless development and usage
+ 
+## Installation
 
-## Setup
+### For Users
 
-1. Create a virtual environment:
-
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/thijse/TextToSpeech.git
+   cd TextToSpeech
    ```
-   python -m venv .venv
-   ```
 
-2. Activate the virtual environment:
+2. **Create and activate a virtual environment**:
    - Windows:
-
+     ```bash
+     python -m venv venv
+     venv\Scripts\activate
      ```
-     .venv\Scripts\activate
-     ```
-
    - macOS/Linux:
-
+     ```bash
+     python -m venv venv
+     source venv/bin/activate
      ```
-     source .venv/bin/activate
-     ```
 
-3. Install dependencies:
-
-   ```
-   pip install -r requirements.txt
+3. **Install the package**:
+   ```bash
+   pip install .
    ```
 
-4. Configure your TTS services:
-   - Open `config.yaml`
+### For Developers
+
+1. **Follow steps 1-2 above**, then:
+
+2. **Install in development mode with dev dependencies**:
+   ```bash
+   pip install -e ".[dev]"
+   ```
+
+3. **Run tests to verify installation**:
+   ```bash
+   pytest tests/ -v
+   ```
+
+### Configuration
+
+1. **Copy the sample configuration**:
+   ```bash
+   cp config/config.sample.yaml config/config.yaml
+   ```
+
+2. **Edit the configuration file**:
+   - Open `config/config.yaml`
    - Set your ElevenLabs API key and preferred voice
    - Set your Azure Speech Service API key, region, and preferred voice
    - Configure default output format and quality
 
+### Testing the Installation
+
+After installation, verify everything works:
+
+```bash
+# Test CLI commands are available
+tts --help
+phonetics --help
+
+# Test voice listing (requires Azure config)
+tts --service azure --voices-short
+
+# Run the test suite (for developers)
+pytest tests/ -v
+```
+
 ## Usage
 
-Run the application:
+After installation, you can use the CLI commands directly:
 
-```
-python main.py
+### Text-to-Speech CLI
+
+```bash
+# Show help
+tts --help
+
+# List all available voices in a concise format
+tts --voices-short
+
+# Process a PowerPoint presentation
+tts --ppt "path/to/presentation.pptx" --voice "en-US-JennyNeural"
+
+# Process a Markdown file
+tts --md "path/to/document.md" --voice "en-US-AriaNeural"
+
+# Test multiple voices with the same text
+tts --test-voices "text_file.txt" "voice_list_file.txt" --output-dir ./voice_samples
+
+# Use Azure TTS service instead of default
+tts --service azure --ppt "presentation.pptx"
 ```
 
-The application supports several command-line options:
+### Phonetics Management CLI
+
+```bash
+# Show help
+phonetics --help
+
+# Interactive mode for managing pronunciations
+phonetics --interactive
+
+# List all custom pronunciations
+phonetics --list
+
+# Record a custom pronunciation
+phonetics --record "worcestershire"
+
+# Test a pronunciation
+phonetics --test "worcestershire"
+
+# Get LLM coaching for pronunciation
+phonetics --coach "worcestershire"
+```
+
+### Alternative: Python Module Usage
+
+You can still use the old Python module syntax if preferred:
+
+```bash
+# TTS CLI
+python -m texttospeech.cli.tts_cli --help
+
+# Phonetics CLI  
+python -m texttospeech.cli.phonetics_cli --help
+```
+
+### Detailed Command Options
 
 1. **Select TTS service**:
 
-   ```
-   python main.py --service elevenlabs  # Use ElevenLabs TTS
-   python main.py --service azure       # Use Azure Speech Service
+   ```bash
+   tts --service elevenlabs  # Use ElevenLabs TTS
+   tts --service azure       # Use Azure Speech Service
    ```
 
 2. **Process PowerPoint files**:
 
-   ```
-   python main.py --ppt "path/to/presentation.pptx" "VoiceName"
+   ```bash
+   tts --ppt "path/to/presentation.pptx" --voice "VoiceName"
    ```
 
    You can also use these additional options:
 
-   ```
-   python main.py --ppt "path/to/presentation.pptx" --no-titles        # Skip slide titles in section headers
-   python main.py --ppt "path/to/presentation.pptx" --overwrite-script  # Regenerate the Markdown script
-   python main.py --ppt "path/to/presentation.pptx" --overwrite-audio   # Regenerate all audio files
-   python main.py --service azure --ppt "path/to/presentation.pptx"     # Process with Azure TTS
+   ```bash
+   tts --ppt "path/to/presentation.pptx" --no-titles        # Skip slide titles in section headers
+   tts --ppt "path/to/presentation.pptx" --overwrite-script  # Regenerate the Markdown script
+   tts --ppt "path/to/presentation.pptx" --overwrite-audio   # Regenerate all audio files
+   tts --service azure --ppt "path/to/presentation.pptx"     # Process with Azure TTS
    ```
 
    **Note**: By default, the application:
@@ -79,32 +170,32 @@ The application supports several command-line options:
 
 3. **Process Markdown files directly**:
 
-   ```
-   python main.py --md "path/to/document.md" "VoiceName"
+   ```bash
+   tts --md "path/to/document.md" --voice "VoiceName"
    ```
 
    You can also use these additional options:
 
-   ```
-   python main.py --md "path/to/document.md" --overwrite-audio   # Regenerate all audio files
-   python main.py --md "path/to/document.md" --output-dir ./output  # Specify output directory
-   python main.py --service azure --md "path/to/document.md"     # Process with Azure TTS
+   ```bash
+   tts --md "path/to/document.md" --overwrite-audio   # Regenerate all audio files
+   tts --md "path/to/document.md" --output-dir ./output  # Specify output directory
+   tts --service azure --md "path/to/document.md"     # Process with Azure TTS
    ```
 
    This allows you to directly convert Markdown files to speech without going through PowerPoint first.
 
 4. **Test multiple voices with the same text**:
 
-   ```
-   python main.py --test-voices "text_file.txt" "voice_list_file.txt"
+   ```bash
+   tts --test-voices "text_file.txt" "voice_list_file.txt"
    ```
 
    This command reads text from a file and processes it with multiple voices listed in another file.
    
    You can also specify an output directory:
 
-   ```
-   python main.py --test-voices "text_file.txt" "voice_list_file.txt" --output-dir ./voice_samples
+   ```bash
+   tts --test-voices "text_file.txt" "voice_list_file.txt" --output-dir ./voice_samples
    ```
 
    The voice list file should contain one voice ID per line. Lines can include comments starting with `#`:
@@ -120,14 +211,14 @@ The application supports several command-line options:
 
 5. **Export voices in a concise format**:
 
-   ```
-   python main.py --voices-short "output_filename.txt"
+   ```bash
+   tts --voices-short "output_filename.txt"
    ```
 
    If no filename is provided, it defaults to "voices_short.txt":
 
-   ```
-   python main.py --voices-short
+   ```bash
+   tts --voices-short
    ```
 
    This exports all available voices in a concise format (one line per voice):
@@ -140,28 +231,28 @@ The application supports several command-line options:
 
 6. **Save detailed voice information to a file**:
 
-   ```
-   python main.py --voices "output_filename.txt"
+   ```bash
+   tts --voices "output_filename.txt"
    ```
 
    If no filename is provided, it defaults to "voices.txt":
 
-   ```
-   python main.py --voices
+   ```bash
+   tts --voices
    ```
 
 7. **Display usage information**:
 
-   ```
-   python main.py --help
+   ```bash
+   tts --help
    ```
 
    This will display usage information and examples for all available commands.
 
 8. **Run in interactive mode**:
 
-   ```
-   python main.py
+   ```bash
+   tts
    ```
 
    This will display usage information and prompt to continue to interactive mode.
@@ -176,11 +267,11 @@ The application supports multiple TTS backends through a common interface:
 
 ```python
 # Using ElevenLabs
-from tts_elevenlabs import ElevenLabsTTS
+from texttospeech.tts.elevenlabs import ElevenLabsTTS
 tts_client = ElevenLabsTTS(api_key="your_api_key", model_id="eleven_monolingual_v1")
 
 # Using Azure
-from tts_azure import AzureTTS
+from texttospeech.tts.azure import AzureTTS
 tts_client = AzureTTS(api_key="your_api_key", region="westus", voice_name="en-US-JennyNeural")
 
 # Both implementations follow the same interface
@@ -191,7 +282,7 @@ for voice in voices.voices:
 
 ### Configuration-Driven Settings
 
-All settings are controlled through the `config.yaml` file:
+All settings are controlled through the `config/config.yaml` file:
 
 ```yaml
 # Select the default TTS service
@@ -211,7 +302,7 @@ azure:
 
 # Output Configuration
 output:
-  format: "mp3"  # mp3, wav, ogg, webm
+  format: "mp3"  # mp3, wav, ogg, webm 
   quality: "high"  # high, medium, low
 ```
 
@@ -219,7 +310,7 @@ output:
 
 ```python
 # Initialize the TTS client (either ElevenLabs or Azure)
-from tts_elevenlabs import ElevenLabsTTS
+from texttospeech.tts.elevenlabs import ElevenLabsTTS
 tts_client = ElevenLabsTTS(api_key="your_api_key", model_id="eleven_monolingual_v1")
 
 # Generate speech using the common interface
@@ -237,11 +328,11 @@ The application can extract notes from PowerPoint presentations and convert them
 
 ```python
 # Initialize the TTS client (either ElevenLabs or Azure)
-from tts_elevenlabs import ElevenLabsTTS
+from texttospeech.tts.elevenlabs import ElevenLabsTTS
 tts_client = ElevenLabsTTS(api_key="your_api_key", model_id="eleven_monolingual_v1")
 
 # Initialize the modality processor with the TTS client
-from modality_to_speech import ModalityToSpeech
+from texttospeech.processing.modality_to_speech import ModalityToSpeech
 modality_processor = ModalityToSpeech(tts_client)
 
 # Process a PowerPoint presentation
@@ -344,11 +435,11 @@ To process this Markdown document:
 
 ```python
 # Initialize the TTS client (either ElevenLabs or Azure)
-from tts_elevenlabs import ElevenLabsTTS
+from texttospeech.tts.elevenlabs import ElevenLabsTTS
 tts_client = ElevenLabsTTS(api_key="your_api_key", model_id="eleven_monolingual_v1")
 
 # Initialize the modality processor with the TTS client
-from modality_to_speech import ModalityToSpeech
+from texttospeech.processing.modality_to_speech import ModalityToSpeech
 modality_processor = ModalityToSpeech(tts_client)
 
 # Read the Markdown document
@@ -385,15 +476,19 @@ This will:
 
 ## Project Structure
 
-- `config.yaml`: Configuration file for all TTS services and output settings
-- `tts_interface.py`: Interface that all TTS implementations must follow
-- `tts_elevenlabs.py`: ElevenLabs implementation of the TTS interface
-- `tts_azure.py`: Azure Speech Service implementation of the TTS interface
-- `modality_to_speech.py`: Handles converting different modalities (Markdown, PowerPoint) to speech
-- `markdown_parser.py`: Parser for Markdown documents with custom file annotations
-- `ppt_processor.py`: Processor for PowerPoint presentations
-- `main.py`: Main application with CLI interface
-- `requirements.txt`: List of Python dependencies
+- `pyproject.toml`: Modern Python package configuration with dependencies and CLI entry points
+- `config/config.yaml`: Configuration file for all TTS services and output settings
+- `src/texttospeech/cli/tts_cli.py`: TTS CLI entry point (accessible as `tts` command)
+- `src/texttospeech/cli/phonetics_cli.py`: Phonetics CLI entry point (accessible as `phonetics` command)
+- `src/texttospeech/tts/interface.py`: Interface that all TTS implementations must follow
+- `src/texttospeech/tts/elevenlabs.py`: ElevenLabs implementation of the TTS interface
+- `src/texttospeech/tts/azure.py`: Azure Speech Service implementation of the TTS interface
+- `src/texttospeech/processing/modality_to_speech.py`: Convert Markdown/PowerPoint to speech
+- `src/texttospeech/processing/markdown_parser.py`: Parser for Markdown documents
+- `src/texttospeech/processing/ppt_processor.py`: Processor for PowerPoint presentations
+- `src/texttospeech/phonetics/manager.py`: Phonetic lookup and helpers
+- `requirements.txt`: List of Python dependencies (legacy, now in pyproject.toml)
+- `tests/`: Test suite for the package
 
 ## Future Enhancements
 
