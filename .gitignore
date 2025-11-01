@@ -1,9 +1,14 @@
 # Specific for this project
 config.yaml
+config/config.yaml
 voices.txt
-
+voices_short.txt
+data/phonetic_lookup.personal.json
+examples/output/
+temp/
 # Generic
 *.bak
+*.wav
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
