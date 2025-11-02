@@ -2,51 +2,36 @@
 applyTo: '/**'
 ---
 
-# IGT Procedure Intelligence - Installation and Build Instructions
+# TextToSpeech - Installation and Build Instructions
 
-This document provides comprehensive guidance for setting up, building, and running the IGT Procedure Intelligence application. This system is built on the Tauri framework with a TypeScript/React frontend and Python backend for medical device integration.
+This document provides guidance for setting up, building, and running the TextToSpeech application. This system converts text, Markdown, and PowerPoint presentations to speech using Azure or ElevenLabs TTS services.
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Project Architecture](#project-architecture)
-3. [Installation Process](#installation-process)
-4. [Build Scripts Overview](#build-scripts-overview)
-5. [Build Process Breakdown](#build-process-breakdown)
-6. [Development Workflow](#development-workflow)
-8. [Troubleshooting](#troubleshooting)
-9. [Environment Configuration](#environment-configuration)
+3. [Quick Start](#quick-start)
+4. [Build Scripts](#build-scripts)
+5. [Development Workflow](#development-workflow)
+6. [Configuration](#configuration)
+7. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
-Before building the project, ensure you have the following installed:
-
 ### Required Tools
 
-1. **Node.js and Yarn**
-   - Node.js 18+ (recommended: latest LTS)
-   - Yarn 4.x (specified in `package.json`: `yarn@4.9.1`)
-
-2. **Python Environment**
+1. **Python Environment**
    - Python 3.10+ 
-   - UV package manager (for Python virtual environment management)
+   - pip (comes with Python)
 
-3. **Rust and Cargo**
-   - Rust 1.70+ (latest stable recommended)
-   - Cargo (comes with Rust)
-
-4. **Tauri CLI**
-   - Installed via yarn: `@tauri-apps/cli@^2.7.1`
-
-### Network Requirements
-
-- **Philips Network Access**: Required for Artifactory dependencies. If any access issues  occur ask the user if the VPN is connected
-- **Internet Access**: For downloading packages from public registries
+2. **TTS Service Credentials**
+   - **Azure**: Speech Service API key and region
+   - **ElevenLabs**: API key (optional, if using ElevenLabs)
 
 ### Platform Support
 
-- **Primary Platform**: Windows (PowerShell scripts provided)
-- **Development Shell**: PowerShell (`pwsh.exe`)
+- **Primary Platform**: Windows
+- **Development Shell**: PowerShell or Command Prompt
 
 ## Project Architecture
 
@@ -62,337 +47,366 @@ igt-procedure-intelligence/
 │   ├── src-tauri/               # Tauri configuration and Rust code
 │   │   ├── python/              # Python backend modules
 │   │   ├── Cargo.toml           # Rust dependencies
-│   │   └── pyproject.toml       # Python dependencies
-└── Build Scripts                 # Automated build processes
-    ├── full_build.bat           # Complete rebuild (only when builds keep breaking and for first-time setup)
-    ├── build.bat                # Standard build (recommended)
-    ├── run.bat                  # Quick run (assumes built)
-    └── stop.bat                 # Stop running processes
+
+## Project Architecture
+
+```
+TextToSpeech/
+├── src/texttospeech/          # Main package
+│   ├── cli/                   # Command-line interfaces
+│   │   ├── tts_cli.py        # Main TTS tool
+│   │   └── phonetics_cli.py  # Phonetic management
+│   ├── tts/                   # TTS backend implementations
+│   │   ├── azure.py          # Azure Speech Service
+│   │   └── elevenlabs.py     # ElevenLabs API
+│   ├── processing/            # Document processing
+│   │   ├── markdown_parser.py
+│   │   └── ppt_processor.py
+│   └── phonetics/             # Phonetic processing
+│       ├── manager.py         # Phonetic lookup
+│       └── processing.py      # SSML generation
+├── config/
+│   ├── config.sample.yaml    # Template configuration
+│   └── config.yaml           # Your settings (gitignored)
+├── data/
+│   ├── phonetic_lookup.json  # Shared pronunciations
+│   └── phonetic_lookup.personal.json  # Your pronunciations (gitignored)
+├── examples/                  # Sample files
+│   ├── sample.md
+│   ├── sample.pptx
+│   └── output/               # Generated audio (gitignored)
+└── build.bat                 # Setup script
 ```
 
 ### Technology Stack
 
-- **Frontend**: React 19, TypeScript, Vite, Zustand (state management)
-- **Backend**: Python 3.10+, Tauri 2.x, Rust
-- **Build Tools**: Vite, Cargo, UV, Yarn
-- **Async Runtime**: anyio (Python), Tokio (Rust)
+- **Backend**: Python 3.10+
+- **TTS Services**: Azure Speech Service, ElevenLabs API
+- **Document Processing**: python-pptx, markdown parsing
+- **Phonetic Processing**: SSML, IPA notation
 
-## Installation Process
+## Quick Start
 
-### Quick Start (Recommended)
-
-For first-time setup or after pulling major changes:
+### First-Time Setup
 
 ```powershell
-# Clone the repository (if not already done)
+# 1. Clone the repository (if not already done)
 git clone <repository-url>
-cd igt-procedure-intelligence
+cd TextToSpeech
 
-# Run complete build (handles all dependencies)
-.\full_build.bat
+# 2. Run build script (creates venv and installs dependencies)
+.\build.bat
+
+# 3. Activate the virtual environment
+.\.venv\Scripts\activate
+
+# 4. Copy and configure settings
+copy config\config.sample.yaml config\config.yaml
+# Edit config\config.yaml with your Azure/ElevenLabs credentials
+
+# 5. Test the installation
+python -m texttospeech.cli.tts_cli --help
 ```
 
 ### Manual Setup
 
 If you prefer step-by-step installation:
 
-1. **Install Frontend Dependencies**
-   ```powershell
-   yarn install
-   ```
+```powershell
+# 1. Create virtual environment
+python -m venv .venv
 
-2. **Setup Python Environment**
-   ```powershell
-   cd src-tauri
-   uv venv .venv --python-preference only-system
-   .\.venv\Scripts\activate
-   uv pip install -e ./
-   cd ..
-   ```
+# 2. Activate virtual environment
+.\.venv\Scripts\activate
 
-3. **Install Rust Dependencies**
-   ```powershell
-   cd src-tauri
-   cargo install --path .
-   cd ..
-   ```
+# 3. Install base dependencies
+pip install -r requirements.txt
 
-4. **Generate TypeScript Types**
-   ```powershell
-   yarn generate-types
-   ```
+# 4. Install phonetic features (optional)
+pip install -r requirements_phonetic.txt
 
-## Build Scripts Overview
-
-The project provides several build scripts for different use cases:
-
-### `full_build.bat` - Complete Rebuild
-
-**When to use**: First setup, or persistent build issues that require a clean slate. This takes longers, 
-so only use when necessary.
-
-**What it does**:
-- Terminates any running cargo processes
-- Checks Philips Artifactory connectivity
-- Completely removes and recreates Python virtual environment
-- Removes and rebuilds Rust target directory
-- Installs all dependencies from scratch
-- Launches development server
-
-**Process flow**:
-```batch
-1. Process cleanup (kill cargo.exe)
-2. Network connectivity check (Artifactory)
-3. Clean Python environment (.venv removal/recreation)
-4. Clean Rust build cache (target/ removal)
-5. Python environment setup (uv venv + pip install)
-6. Rust dependency installation (cargo install)
-7. Frontend dependency installation (yarn)
-8. Launch development server (yarn tauri dev)
+# 5. Configure
+copy config\config.sample.yaml config\config.yaml
 ```
 
-### `build.bat` - Standard Build
+## Build Scripts
 
-**When to use**: Regular development, minor changes
+### `build.bat` - Setup and Install
+
+**When to use**: First setup, after pulling changes, or when dependencies change
 
 **What it does**:
-- Terminates running cargo processes
 - Creates Python virtual environment (if missing)
-- Activates Python environment
-- Installs frontend dependencies
-- Launches development server
+- Activates the environment
+- Installs all dependencies from requirements.txt
+- Installs optional phonetic dependencies from requirements_phonetic.txt
 
 **Process flow**:
 ```batch
-1. Process cleanup (kill cargo.exe)
-2. Python environment check/creation
-3. Environment activation
-4. Frontend dependencies (yarn)
-5. Launch development server (yarn tauri dev)
+1. Check/create .venv directory
+2. Create virtual environment
+3. Activate environment
+4. Install base requirements
+5. Install phonetic requirements (if present)
 ```
-
-### `run.bat` - Quick Run
-
-**When to use**: When dependencies are already installed
-
-**What it does**:
-- Terminates running processes
-- Activates existing Python environment
-- Launches development server directly
-
-### `stop.bat` - Stop Processes
-
-**When to use**: To cleanly terminate running development servers
-
-**What it does**:
-- Terminates all cargo.exe processes and children
-
-## Build Process Breakdown
-
-### Phase 1: Environment Preparation
-
-```powershell
-# Process cleanup - ensures clean start
-taskkill /F /FI "IMAGENAME eq cargo.exe" /T 2>nul
-taskkill /F /IM cargo.exe 2>nul
-
-# Network verification
-ping -n 1 artifactory-ehv.ta.philips.com >nul 2>&1
-```
-
-**Why this matters**: Cargo processes can sometimes hang, blocking new builds. The Artifactory check ensures access to Philips-specific dependencies.
-
-### Phase 2: Python Backend Setup
-
-```powershell
-cd src-tauri
-
-# Virtual environment management
-if exist .venv (
-    rmdir /s /q .venv  # Full rebuild only
-)
-uv venv .venv --python-preference only-system
-
-# Dependency installation
-call .venv\Scripts\activate
-uv pip install -e ./
-```
-
-**Key dependencies installed**:
-- `pytauri`: Tauri-Python bridge
-- `pydantic`: Data validation and serialization
-- `anyio`: Structured concurrency
-- `openai`: AI integration
-- Medical device interfaces (CAN bus, space mouse, etc.)
-
-### Phase 3: Rust Application Setup
-
-```powershell
-# Build cache cleanup (full rebuild only)
-if exist target (
-    rmdir /s /q target
-)
-
-# Rust dependency installation
-cargo install --path .
-```
-
-**Key Rust components**:
-- Tauri core and plugins
-- System integration libraries
-- Static/dynamic library generation
-
-### Phase 4: Frontend Application Setup
-
-```powershell
-cd ..  # Back to root directory
-
-# Node.js dependencies
-yarn install
-
-# TypeScript type generation from Python models
-yarn generate-types
-```
-
-**Key frontend dependencies**:
-- React 19 with TypeScript
-- Tauri API bindings
-- 3D rendering (Three.js)
-- UI components and styling
-
-### Phase 5: Development Server Launch
-
-```powershell
-# Start integrated development environment
-yarn tauri dev
-```
-
-**What happens during `tauri dev`**:
-1. Rust backend compilation
-2. Python module loading and initialization
-3. Frontend development server (Vite)
-4. Hot-reload setup for both frontend and backend
-5. Window management and system integration
 
 ## Development Workflow
 
-### Recommended Development Cycle
+### Environment Activation
 
-1. **Initial Setup**
-   ```powershell
-   .\full_build.bat
-   ```
-
-2. **Daily Development**
-   ```powershell
-   .\build.bat        # Standard build
-   # or
-   .\run.bat          # If no dependency changes
-   ```
-
-3. **Clean Rebuild** (when facing issues)
-   ```powershell
-   .\stop.bat         # Stop current processes
-   .\full_build.bat   # Complete rebuild
-   ```
-
-### Hot Reload Behavior
-
-- **Frontend Changes**: Instant hot-reload via Vite
-- **Python Backend Changes**: Automatic restart (may take 2-3 seconds)
-- **Rust Changes**: Full recompilation (30-60 seconds)
-- **Configuration Changes**: Usually requires full restart
-
-### File Watching
-
-The development server watches:
-- `src/**` - Frontend React components
-- `src-tauri/python/**` - Python backend modules
-- `src-tauri/src/**` - Rust application code
-- `src-tauri/tauri.conf.json` - Tauri configuration
-
-## Production Build
-
-### Creating Production Builds
+**Always activate before running commands:**
 
 ```powershell
-# Frontend production build
-yarn build
+# PowerShell/Command Prompt
+.\.venv\Scripts\activate
 
-# Full application bundle
-yarn tauri build
+# You should see (.venv) in your prompt
 ```
 
-### Build Outputs
+### Daily Development
 
-Production builds generate:
-- **Frontend**: Optimized static files in `dist/`
-- **Application**: Platform-specific installer in `src-tauri/target/release/bundle/`
+```powershell
+# 1. Activate environment
+.\.venv\Scripts\activate
 
+# 2. Run commands (examples below)
+python -m texttospeech.cli.tts_cli --help
+python -m texttospeech.cli.phonetics_cli --help
+
+# 3. After pulling new changes
+pip install -r requirements.txt
+pip install -r requirements_phonetic.txt
+```
+
+### Common Tasks
+
+**List available voices:**
+```powershell
+python -m texttospeech.cli.tts_cli --voices
+python -m texttospeech.cli.tts_cli --voices-short  # Condensed view
+```
+
+**Convert Markdown to speech:**
+```powershell
+python -m texttospeech.cli.tts_cli --md examples\sample.md --output-dir examples\output
+```
+
+**Convert PowerPoint to speech:**
+```powershell
+python -m texttospeech.cli.tts_cli --ppt examples\sample.pptx --output-dir examples\output
+```
+
+**Manage phonetic pronunciations:**
+```powershell
+python -m texttospeech.cli.phonetics_cli --interactive
+python -m texttospeech.cli.phonetics_cli --list
+python -m texttospeech.cli.phonetics_cli --coach tomato
+```
+
+## Configuration
+
+### Configuration File
+
+Edit `config/config.yaml` with your credentials:
+
+```yaml
+azure:
+  api_key: "YOUR_AZURE_KEY"
+  region: "eastus"
+
+elevenlabs:
+  api_key: "YOUR_ELEVENLABS_KEY"
+
+default_voice: "en-US-JennyNeural"
+output_format: "mp3"
+```
+
+### Environment Variables
+
+Alternatively, use environment variables:
+
+```powershell
+# Azure credentials
+$env:AZURE_SPEECH_KEY = "your-key"
+$env:AZURE_SPEECH_REGION = "eastus"
+
+# ElevenLabs credentials
+$env:ELEVENLABS_API_KEY = "your-key"
+```
+
+### Phonetic Lookup Files
+
+Two lookup files for custom pronunciations:
+
+1. **Shared (tracked)**: `data/phonetic_lookup.json`
+   - Team-shared pronunciations
+   - Committed to repository
+
+2. **Personal (gitignored)**: `data/phonetic_lookup.personal.json`
+   - Your personal pronunciations
+   - Overrides shared entries
+   - Not committed
+
+The system automatically merges both files, with personal entries taking precedence.
 
 ## Troubleshooting
 
-### Debug Information
+### Common Issues
+
+**Issue: "Module not found" errors**
+```powershell
+# Solution: Ensure environment is activated and dependencies installed
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Issue: "Invalid API key" or credential errors**
+```powershell
+# Solution: Check config/config.yaml or environment variables
+# Verify credentials are correct for your service
+```
+
+**Issue: Audio generation fails**
+```powershell
+# Solution: Check output directory exists and is writable
+mkdir examples\output
+```
+
+**Issue: PowerPoint processing fails**
+```powershell
+# Solution: Ensure PowerPoint file is not open in another program
+# Check file permissions
+```
+
+### Debug Mode
 
 Enable verbose logging:
+
 ```powershell
-# Environment variables for debugging
-$env:RUST_LOG="debug"
-$env:TAURI_DEBUG="true"
+# Set environment variable for detailed output
+$env:TEXTTOSPEECH_DEBUG = "true"
+python -m texttospeech.cli.tts_cli --md examples\sample.md
+```
+
+### Dependency Issues
+
+If you encounter package conflicts:
+
+```powershell
+# Remove and recreate virtual environment
+deactivate
+rmdir /s .venv
 .\build.bat
 ```
 
-### Log Locations
-
-- **Tauri Logs**: Console output during development
-- **Python Logs**: Check Python logging configuration in backend
-- **Build Logs**: Terminal output during build process
-
-## Environment Configuration
-
-### Required Environment Variables
-
-Some features require environment variables:
+## Essential Commands Reference
 
 ```powershell
-# Azure OpenAI (for voice control)
-$env:AZURE_OPENAI_API_KEY="your-api-key"
-$env:AZURE_OPENAI_ENDPOINT="your-endpoint"
+# Setup
+.\build.bat                                    # First-time setup
+.\.venv\Scripts\activate                      # Activate environment
 
-# Development settings
-$env:RUST_LOG="info"  # Rust logging level
-$env:PYTHONPATH="src-tauri/python"  # Python module path
+# TTS Operations
+python -m texttospeech.cli.tts_cli --voices   # List voices
+python -m texttospeech.cli.tts_cli --md FILE  # Convert Markdown
+python -m texttospeech.cli.tts_cli --ppt FILE # Convert PowerPoint
+
+# Phonetic Management
+python -m texttospeech.cli.phonetics_cli --interactive  # Interactive mode
+python -m texttospeech.cli.phonetics_cli --list         # Show all pronunciations
+python -m texttospeech.cli.phonetics_cli --coach WORD   # Get pronunciation help
+
+# Maintenance
+pip install -r requirements.txt               # Update dependencies
+deactivate                                    # Exit virtual environment
 ```
 
-### Configuration Files
+## Project Structure Details
 
-Key configuration files:
-- `src-tauri/tauri.conf.json` - Tauri application settings
-- `src-tauri/pyproject.toml` - Python dependencies and metadata
-- `src-tauri/Cargo.toml` - Rust dependencies and build settings
-- `package.json` - Frontend dependencies and scripts
-- `vite.config.ts` - Frontend build configuration
+### CLI Applications
 
+- **`tts_cli.py`**: Main text-to-speech conversion tool
+  - Markdown processing
+  - PowerPoint processing
+  - Voice listing and management
+  - Audio format configuration
 
-### Essential Commands
+- **`phonetics_cli.py`**: Phonetic pronunciation management
+  - Interactive pronunciation editing
+  - LLM-powered pronunciation coaching
+  - Personal phonetic lookup overlay
+
+### Core Modules
+
+- **`tts/`**: TTS backend implementations
+  - Azure Speech Service integration
+  - ElevenLabs API integration
+  - SSML generation and processing
+
+- **`processing/`**: Document processors
+  - Markdown parsing with voice aliases
+  - PowerPoint slide extraction
+  - Text segmentation
+
+- **`phonetics/`**: Phonetic processing
+  - IPA notation validation
+  - SSML phoneme tag generation
+  - Phonetic lookup management
+
+## Getting Help
+
+For detailed usage of specific features:
 
 ```powershell
-# First-time setup or major rebuild
-.\full_build.bat
+# General help
+python -m texttospeech.cli.tts_cli --help
+python -m texttospeech.cli.phonetics_cli --help
 
-# Regular development
-.\build.bat
-
-# Quick start (dependencies already installed)
-.\run.bat
-
-# Stop all processes
-.\stop.bat
-
-# Manual commands
-yarn install                    # Frontend dependencies
-yarn generate-types           # TypeScript type generation
-yarn tauri dev                # Development server
-yarn tauri build              # Production build
+# See examples
+dir examples\
+type examples\sample.md
 ```
 
+Refer to `docs/README.md` and `docs/README_phonetic.md` for detailed documentation.
+
+
+## Console scripts (aliases) via pyproject
+
+The project exposes easy-name CLI aliases through [project.scripts](pyproject.toml:47). After an editable install, you can run the tools directly as commands.
+
+- Aliases:
+  - tts → [main()](src/texttospeech/cli/tts_cli.py:310)
+  - phonetics → [main()](src/texttospeech/cli/phonetics_cli.py:59)
+
+Steps (Windows PowerShell):
+1) Create and activate a virtual environment
+   - python -m venv .venv
+   - .\.venv\Scripts\Activate.ps1
+2) Install the project (editable)
+   - python -m pip install --upgrade pip
+   - python -m pip install -e .
+3) Use the console scripts
+   - tts --help
+   - phonetics --help
+   - Examples:
+     - tts --service azure --voices-short voices_short.txt
+     - tts --md examples\sample.md --voice en-US-JennyNeural --overwrite-audio
+     - phonetics --interactive
+     - phonetics --coach "Worcestershire" --coach-record
+
+Notes:
+- Without activating the venv, you can call the executables directly:
+  - .\.venv\Scripts\tts.exe --help
+  - .\.venv\Scripts\phonetics.exe --help
+- On macOS/Linux:
+  - source .venv/bin/activate
+  - tts --help
+  - phonetics --help
+- Alternative (no install): module-run form
+  - python -m texttospeech.cli.tts_cli --help
+  - python -m texttospeech.cli.phonetics_cli --help
+
+Reference:
+- Configuration and packaging are defined in [pyproject.toml](pyproject.toml)
+- TTS CLI entrypoint: [main()](src/texttospeech/cli/tts_cli.py:310)
+- Phonetics CLI entrypoint: [main()](src/texttospeech/cli/phonetics_cli.py:59)

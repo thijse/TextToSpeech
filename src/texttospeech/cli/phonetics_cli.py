@@ -15,9 +15,11 @@ Notes:
 
 import sys
 import argparse
+import os
 
 from texttospeech.phonetics.phonetic_word_manager import InteractivePhoneticManager
 from texttospeech.phonetics.llm_phonetic_coach import LLMPhoneticCoach
+from texttospeech.phonetics.processing import PhoneticNotationValidator
 
 
 def display_usage():
@@ -37,6 +39,7 @@ def display_usage():
     print("  --remove WORD              Remove PERSONAL pronunciation for a specific word")
     print("  --test, -t WORD            Test pronunciation playback for a specific word")
     print("  --coach WORD               Start an LLM coaching session for a specific word")
+    print("  --coach-record             Record a baseline before starting LLM coach")
     print("  --config, -c CONFIG_FILE   Path to configuration file (default: config/config.yaml)")
     print("  --help, -h                 Show this help message\n")
 
@@ -97,6 +100,11 @@ def main():
         help="Start an LLM coaching session for a specific word",
     )
     parser.add_argument(
+        "--coach-record",
+        action="store_true",
+        help="Record a baseline before starting LLM coach",
+    )
+    parser.add_argument(
         "--config",
         "-c",
         metavar="CONFIG_FILE",
@@ -147,8 +155,32 @@ def main():
             return
 
         if args.coach:
+            baseline = None
+            if getattr(args, "coach_record", False):
+                # Record a baseline and extract phonetics before coaching
+                audio_file = manager.recorder.record_word(duration=3.0)
+                if audio_file:
+                    try:
+                        result = manager.extractor.extract_phonetics_from_audio(audio_file, expected_word=args.coach)
+                        if result:
+                            recognized_text, phonetic = result
+                            # Normalize wrapper via lookup manager when available
+                            try:
+                                baseline = manager.lookup_manager._normalize_and_wrap(phonetic)
+                            except Exception:
+                                # Fallback: classify and wrap
+                                nt = PhoneticNotationValidator.classify_notation(phonetic or recognized_text)
+                                if nt.value == "ipa":
+                                    baseline = f"[ipa:{phonetic}]"
+                                else:
+                                    baseline = f"[pron:{phonetic}]"
+                    finally:
+                        try:
+                            os.remove(audio_file)
+                        except Exception:
+                            pass
             coach = LLMPhoneticCoach(manager)
-            coach.start_coaching_session(args.coach)
+            coach.start_coaching_session(args.coach, baseline=baseline)
             return
 
         # If no recognized action was provided, show usage

@@ -270,14 +270,19 @@ class ModalityToSpeech:
                     # Determine the appropriate markup based on phonetic classification
                     try:
                         from texttospeech.phonetics.processing import PhoneticNotationValidator
+                        # Extract core to avoid double-wrapping like [ipa:[ipa:...]]
+                        try:
+                            core = lookup_manager._extract_core(phonetic_entry.phonetic)
+                        except Exception:
+                            core = phonetic_entry.phonetic.strip()
                         notation_type = PhoneticNotationValidator.classify_notation(phonetic_entry.phonetic)
                         if notation_type.value == 'ipa':
-                            replacement = f"[ipa:{phonetic_entry.phonetic}]{matched_word}[/ipa]"
+                            replacement = f"[ipa:{core}]{matched_word}[/ipa]"
                         elif notation_type.value == 'syllabic':
-                            replacement = f"[pron:{phonetic_entry.phonetic}]{matched_word}[/pron]"
+                            replacement = f"[pron:{core}]{matched_word}[/pron]"
                         else:
                             # Default to pronunciation markup for other types
-                            replacement = f"[pron:{phonetic_entry.phonetic}]{matched_word}[/pron]"
+                            replacement = f"[pron:{core}]{matched_word}[/pron]"
                         
                         # Replace the matched word with marked up version
                         processed_text = processed_text[:start] + replacement + processed_text[end:]

@@ -1,4 +1,4 @@
-# Repository Reorganization Plan
+# Repository Reorganization Plan 
 
 Summary and goals
 - Consolidate code into src/texttospeech package without packaging (no pyproject.toml).

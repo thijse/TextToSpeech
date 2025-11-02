@@ -150,12 +150,15 @@ class LLMPhoneticCoach:
             logging.error(f"Failed to setup Azure OpenAI: {e}")
             self.azure_client = None
 
-    def start_coaching_session(self, word: str) -> None:
-        """Start an interactive coaching session for a specific word."""
+    def start_coaching_session(self, word: str, baseline: Optional[str] = None) -> None:
+        """Start an interactive coaching session for a specific word.
+    
+        baseline: Optional single-tag phonetic (e.g., [ipa:...]/[pron:...]) to prepend as the recorded baseline option.
+        """
         self.current_word = word.lower()
         self.conversation_history = []
         self.current_options = []
-
+    
         print(f"\n🎓 LLM Phonetic Coach - Working on '{word}'")
         print("=" * 50)
         print("I'm your pronunciation coach! Let's work together to find the perfect")
@@ -170,10 +173,39 @@ class LLMPhoneticCoach:
         print("  'play <phonetics>' - Test custom pronunciation")
         print("  Or describe what you want...")
         print("-" * 50)
-
+    
         # Get initial phonetic suggestions
         self._generate_initial_suggestions(word)
-
+    
+        # Inject recorded baseline option at the top if provided and not a duplicate
+        if baseline:
+            try:
+                norm = baseline.strip()
+                # Normalize wrapper via lookup manager when available
+                if hasattr(self.phonetic_manager, 'lookup_manager') and hasattr(self.phonetic_manager.lookup_manager, '_normalize_and_wrap'):
+                    norm = self.phonetic_manager.lookup_manager._normalize_and_wrap(norm)
+    
+                # Extract core value for deduplication
+                core = norm
+                if core.startswith('[') and core.endswith(']') and ':' in core:
+                    core = core.split(':', 1)[1][:-1]
+    
+                existing_cores = set()
+                for opt in self.current_options:
+                    s = opt.phonetic.strip()
+                    c = s.split(':', 1)[1][:-1] if s.startswith('[') and s.endswith(']') and ':' in s else s
+                    existing_cores.add(c)
+    
+                if core not in existing_cores:
+                    self.current_options.insert(0, PhoneticOption(description="Recorded baseline", phonetic=norm))
+                    print("🎼 Added recorded baseline option at the top.")
+            except Exception as e:
+                try:
+                    if hasattr(self, 'logger'):
+                        self.logger.debug(f"Baseline injection warning: {e}")
+                except Exception:
+                    pass
+    
         # Start conversation loop
         self._conversation_loop()
 

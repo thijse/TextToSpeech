@@ -458,16 +458,41 @@ def validate_phonetic_notation(phonetic: str) -> Tuple[PhoneticNotationType, boo
 def process_phonetic_for_tts(text: str, phonetic: str, backend: str = "azure") -> Tuple[str, str]:
     """
     Process a single phonetic for TTS backend.
+
+    Wrapper-aware behavior:
+    - If phonetic already has a tag ([ipa:], [pron:], [ph:], [phonetic:]) use that tag and its core.
+    - If phonetic is bare, classify and choose [ipa:] for IPA; otherwise [pron:].
+    - Avoid double-wrapping and strip surrounding slashes when present.
     
     Returns:
         (method, content): Method type ("ssml" or "text") and the content
     """
     processor = PhoneticProcessor(backend=backend)
-    
-    # Create a simple phonetic markup for processing
-    markup = f"[ipa:{phonetic}]{text}[/ipa]"
+
+    # Extract tag and core if already wrapped
+    s = (phonetic or "").strip()
+    tag = None
+    core = s
+    if s.startswith("[") and s.endswith("]") and ":" in s:
+        tag, rest = s[1:].split(":", 1)
+        tag = tag.lower()
+        core = rest[:-1]  # drop trailing ]
+    elif s.startswith("/") and s.endswith("/") and len(s) > 2:
+        core = s[1:-1]
+
+    # Decide tag if not explicitly provided
+    if tag not in ("ipa", "pron", "ph", "phonetic"):
+        notation_type = PhoneticNotationValidator.classify_notation(core)
+        tag = "ipa" if notation_type == PhoneticNotationType.IPA else "pron"
+
+    # Normalize tag aliases
+    if tag in ("ph", "phonetic"):
+        tag = "pron"
+
+    # Build paired markup around the target text using the chosen tag and core
+    markup = f"[{tag}:{core}]{text}[/{tag}]"
+
     is_ssml, processed = processor.preprocess_text(markup)
-    
     return ("ssml" if is_ssml else "text", processed)
 
 

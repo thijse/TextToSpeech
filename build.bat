@@ -1,5 +1,5 @@
 @echo off
-echo Building Application environment...
+echo Building TextToSpeech environment...
 
 REM Check if venv directory exists
 if not exist "venv" (
@@ -17,7 +17,7 @@ if not exist "venv" (
 
 REM Activate virtual environment
 echo Activating virtual environment...
-call venv\Scripts\activate.bat
+call venv\Scripts\activate
 if errorlevel 1 (
     echo Failed to activate virtual environment.
     pause
@@ -28,22 +28,42 @@ REM Upgrade pip to latest version
 echo Upgrading pip...
 python -m pip install --upgrade pip
 
-REM Install requirements if requirements.txt exists and is not empty
-if exist "requirements.txt" (
-    echo Installing requirements from requirements.txt...
-    pip install -r requirements.txt
+REM Install package in editable mode from pyproject.toml
+if exist "pyproject.toml" (
+    echo Installing package and dependencies from pyproject.toml...
+    pip install -e .
     if errorlevel 1 (
-        echo Failed to install requirements.
+        echo Failed to install package and dependencies.
         pause
         exit /b 1
     )
-    echo Requirements installed successfully.
+    echo Package and dependencies installed successfully.
 ) else (
-    echo requirements.txt not found, skipping package installation.
+    echo pyproject.toml not found! Cannot install dependencies.
+    pause
+    exit /b 1
 )
 
+REM Install optional development dependencies
+echo.
+set /p INSTALL_DEV="Install development dependencies? (y/n): "
+if /i "%INSTALL_DEV%"=="y" (
+    echo Installing development dependencies...
+    pip install -e ".[dev]"
+    if errorlevel 1 (
+        echo Warning: Failed to install development dependencies.
+    ) else (
+        echo Development dependencies installed successfully.
+    )
+)
+
+echo.
 echo Build completed successfully!
 echo Virtual environment is activated and ready to use.
+echo.
+echo You can now run:
+echo   - tts --help           (Main TTS CLI)
+echo   - phonetics --help     (Phonetics management CLI)
 
 REM Check if we're already in an activated virtual environment
 if "%VIRTUAL_ENV%"=="" (
