@@ -28,7 +28,10 @@ Package layout under src/:
   - [src/texttospeech/phonetics/processing.py](src/texttospeech/phonetics/processing.py)
 
 Execution model
-- Run CLIs via python -m with PYTHONPATH=src:
+- Preferred: console scripts from pyproject
+  - tts [options]
+  - phonetics [options]
+- Alternative: module-run form
   - TTS CLI: python -m texttospeech.cli.tts_cli [options]
   - Phonetics CLI: python -m texttospeech.cli.phonetics_cli [options]
 - Config defaults to [config/config.yaml](config/config.yaml); a sample is provided at [config/config.sample.yaml](config/config.sample.yaml).
@@ -78,8 +81,8 @@ Configuration
 Dependencies
 - Primary packaging: [pyproject.toml](pyproject.toml)
 - Preferred install (editable):
-  - python -m venv .venv
-  - .\.venv\Scripts\Activate
+  - python -m venv venv
+  - venv\Scripts\Activate
   - python -m pip install --upgrade pip
   - python -m pip install -e .
 - SDKs for optional features:

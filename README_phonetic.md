@@ -1,176 +1,219 @@
-# Standalone Phonetic Word Manager
+# Phonetic Word Manager
 
-A complete standalone tool for recording custom word pronunciations, extracting phonetic notations, and managing a phonetic lookup database for Text-to-Speech applications.
+A complete tool for recording custom word pronunciations, extracting phonetic notations, and managing a phonetic lookup database for Text-to-Speech applications. Integrated with the unified TTS pipeline and an optional LLM-based pronunciation coach.
 
-## Features
+## Key Features
 
-🎙️ **Audio Recording** - Record pronunciation samples with countdown timer  
-🔍 **Phonetic Extraction** - Convert audio to IPA-compatible phonetic notation using Azure Speech Recognition  
-📚 **Phonetic Database** - Store and manage custom pronunciations  
-🔊 **TTS Playback** - Test phonetic pronunciations using Azure TTS with SSML  
-⚡ **Interactive Workflow** - Easy step-by-step process for managing pronunciations  
-🗂️ **SSML Integration** - Generate SSML markup for Azure TTS or ElevenLabs-compatible text
+- 🎙️ Audio Recording – Record pronunciation samples with a countdown timer
+- 🔍 Phonetic Extraction – Approximate IPA-compatible phonetic notation via Azure Speech recognition
+- 📚 Overlay Phonetic Database – Team-shared + personal overrides with normalization
+- 🔊 TTS Playback – Test pronunciations using the unified pipeline (SSML-aware for Azure)
+- ⚡ Interactive Workflow – Menu-driven recording and management
+- 🧠 LLM Coach – Conversational guidance, baseline injection, and save workflows
 
 ## Installation
 
-1. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements_phonetic.txt
-   ```
+Recommended: editable install with console scripts.
 
-2. **Set up Azure Speech Services:**
-   - Get an Azure Speech Services API key and region
-   - Copy `config/config.sample.yaml` to `config/config.yaml`
-   - Fill in your Azure credentials:
-     ```yaml
-     azure:
-       api_key: "your_azure_api_key"
-       region: "your_azure_region"  # e.g., "westus"
-       voice_name: "en-US-JennyNeural"
-     ```
+Windows PowerShell:
+```powershell
+# Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\Activate.ps1
 
-3. **Ensure you have a microphone** connected to your system
+# Upgrade pip and install the project
+python -m pip install --upgrade pip
+python -m pip install -e .
 
-## Usage
+# (Optional) developer extras
+python -m pip install -e ".[dev]"
 
-### Interactive Mode (Recommended)
-```bash
-python -m texttospeech.cli.phonetics_cli --interactive
+# Copy sample config and fill credentials
+copy config\config.sample.yaml config\config.yaml
 ```
 
-This launches a menu-driven interface where you can:
-1. Record new word pronunciations
-2. List existing pronunciations  
-3. Remove pronunciations
-4. Test pronunciation playback
-5. Add manual pronunciations
-
-### Command Line Mode
-
-**Record a specific word:**
+macOS/Linux:
 ```bash
-python -m texttospeech.cli.phonetics_cli --record tomato
+python -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -e ".[dev]"
+cp config/config.sample.yaml config/config.yaml
 ```
 
-**List all pronunciations:**
-```bash
-python -m texttospeech.cli.phonetics_cli --list
-```
+Console scripts (defined in [pyproject.toml](pyproject.toml:47-50)):
+- tts → [main()](src/texttospeech/cli/tts_cli.py:310)
+- phonetics → [main()](src/texttospeech/cli/phonetics_cli.py:62)
 
-**Test a pronunciation:**
-```bash
-python -m texttospeech.cli.phonetics_cli --test tomato
-```
-
-**Remove a pronunciation:**
-```bash
-python -m texttospeech.cli.phonetics_cli --remove tomato
-```
-
-**Show help:**
+Alternative module-run form:
 ```bash
 python -m texttospeech.cli.phonetics_cli --help
 ```
 
+## Configuration
+
+Edit `config/config.yaml`:
+- Azure Speech: `azure.api_key`, `azure.region`, `azure.voice_name`
+- ElevenLabs (optional): `elevenlabs.api_key`, `elevenlabs.voice_name`, `elevenlabs.model_id`
+- Azure OpenAI (LLM Coach): `azure_openai` block (endpoint, api_key, deployment_name/model, api_version)
+
+The LLM Coach avoids initialization if the API key is the placeholder or the endpoint contains the placeholder resource name (see [LLMPhoneticCoach._setup_azure_openai()](src/texttospeech/phonetics/llm_phonetic_coach.py:111)).
+
+## Usage
+
+Primary usage via console alias:
+```bash
+phonetics --help
+```
+
+Common commands:
+```bash
+# Interactive mode (recommended)
+phonetics --interactive
+
+# Record a specific word
+phonetics --record tomato
+
+# List pronunciations (overlaid: general + personal)
+phonetics --list
+
+# Test a pronunciation
+phonetics --test tomato
+
+# Remove a PERSONAL override (general remains intact)
+phonetics --remove tomato
+
+# LLM coaching for a word
+phonetics --coach "worcestershire"
+
+# LLM coaching with baseline recording injection
+phonetics --coach "worcestershire" --coach-record
+
+# Use a specific config
+phonetics --config config\config.yaml
+```
+
+Module form (alternative):
+```bash
+python -m texttospeech.cli.phonetics_cli --interactive
+```
+
 ## Recording Workflow
 
-When you record a word, the system follows this workflow:
+When you record a word:
+1. Enter the word to record
+2. Existing-check – if present, choose whether to overwrite
+3. Record audio – 3-second countdown, then capture
+4. Extract phonetics – Azure Speech recognition + heuristic approximation
+5. Review & edit – optionally edit phonetics
+6. Test playback – hear the result via the unified TTS pipeline
+7. Save decision – write to your personal overlay dictionary
 
-1. **Enter the word** to record
-2. **Check existing** - If the word exists, ask if you want to overwrite
-3. **Record audio** - 3-second countdown, then record your pronunciation
-4. **Extract phonetics** - Azure Speech Recognition converts audio to phonetic notation
-5. **Review & edit** - View the generated phonetics and optionally edit them
-6. **Test playback** - Hear how the phonetics sound using Azure TTS
-7. **Save decision** - Choose whether to save the pronunciation to your database
+## Output and Dictionary Overlay
 
-## Output
+The tool uses an overlay-capable phonetic lookup managed by [src/texttospeech/phonetics/manager.py](src/texttospeech/phonetics/manager.py:50):
 
-The tool creates:
-- **`phonetic_lookup.json`** - Your custom phonetic pronunciation database
-- **Temporary audio files** - Automatically cleaned up after processing
+- Shared (tracked): `data/phonetic_lookup.json`
+- Personal (gitignored): `data/phonetic_lookup.personal.json`
 
-## Phonetic Database Format
+Rules:
+- Personal entries override shared entries
+- CRUD writes go to the personal file only
+- Notations are normalized and wrapped as `[ipa:...]` or `[pron:...]` for consistent processing
 
-The database stores pronunciations in JSON format:
+## LLM Phonetic Coach
 
-```json
-{
-  "tomato": {
-    "word": "tomato",
-    "phonetic": "təˈmeɪtoʊ",
-    "source": "recorded",
-    "confidence": 1.0,
-    "created_date": "2025-08-25T10:30:00"
-  }
-}
-```
+- Start with: `phonetics --coach WORD`
+- Optional baseline injection: `--coach-record` to record a short attempt; automatically normalized and injected as an option
+- Coach integrates unified playback and dictionary-aware options
+- Unified playback path: [InteractivePhoneticManager._play_phonetic_unified()](src/texttospeech/phonetics/phonetic_word_manager.py:308) → [ModalityToSpeech.synthesize_single_segment()](src/texttospeech/processing/modality_to_speech.py:177)
+
+Coach initialization and Azure OpenAI configuration:
+- See [LLMPhoneticCoach._setup_azure_openai()](src/texttospeech/phonetics/llm_phonetic_coach.py:111)
 
 ## Integration with TTS Systems
 
-### Azure TTS (SSML)
+Apply dictionary phonetics to text before synthesis:
+
+Azure (SSML):
 ```python
 from texttospeech.phonetics.manager import PhoneticLookupManager
 
 manager = PhoneticLookupManager()
 text = "I like tomato soup"
 ssml_text = manager.apply_to_text_azure(text)
-# Result: <speak version="1.0"...><phoneme alphabet="ipa" ph="təˈmeɪtoʊ">tomato</phoneme>...</speak>
+# e.g., <speak ...><phoneme alphabet="ipa" ph="təˈmeɪtoʊ">tomato</phoneme>...</speak>
 ```
 
-### ElevenLabs
+ElevenLabs (plain text with inline hints):
 ```python
+from texttospeech.phonetics.manager import PhoneticLookupManager
+
+manager = PhoneticLookupManager()
 text = "I like tomato soup"
 elevenlabs_text = manager.apply_to_text_elevenlabs(text)
-# Result: "I like tomato (təˈmeɪtoʊ) soup"
+# e.g., "I like tomato (təˈmeɪtoʊ) soup"
 ```
 
 ## Dependencies
 
-- **azure-cognitiveservices-speech** - Azure Speech Services SDK
-- **sounddevice** - Audio recording capabilities
-- **soundfile** - Audio file handling
-- **PyYAML** - Configuration file parsing
+Installed via [pyproject.toml](pyproject.toml:27-38):
+- azure-cognitiveservices-speech (Azure Speech)
+- sounddevice (recording)
+- soundfile (audio I/O)
+- numpy (audio concatenation / processing)
+- pyyaml (config)
+- openai (LLM Coach)
 
 ## Troubleshooting
 
-**Import errors:** Install dependencies with `pip install -r requirements_phonetic.txt`
+- Import errors:
+  - Ensure venv is active and the package is installed: `python -m pip install -e .`
 
-**Audio recording issues:** 
-- Check microphone permissions
-- Ensure microphone is connected and working
-- Try adjusting microphone volume
+- Audio recording issues:
+  - Check microphone permissions and device availability
+  - Adjust input levels; try different microphones
 
-**Azure authentication errors:**
-- Verify your API key and region in `config/config.yaml`
-- Check your Azure subscription status
-- Ensure the Speech Services resource is active
+- Azure authentication errors:
+  - Verify `azure.api_key` and `azure.region` in `config/config.yaml`
+  - Alternatively set env vars: `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`
 
-**No sound during playback:**
-- Check system audio output
-- Verify speakers/headphones are connected
-- Try adjusting system volume
+- No sound during playback:
+  - Check system output devices and volume
+  - Confirm the generated temp files can be played
+
+- LLM Coach not available or not configured:
+  - Install deps via editable install (OpenAI SDK is included)
+  - Fill `azure_openai` in config; placeholders are treated as unconfigured
 
 ## Examples
 
-### Recording "Worcestershire"
+Recording "Worcestershire":
 ```bash
-python -m texttospeech.cli.phonetics_cli --record worcestershire
+phonetics --record worcestershire
 ```
-1. System prompts you to record
-2. You pronounce "Worcestershire"
-3. Azure recognizes it and generates: `wʊstərʃər`
-4. You can edit to: `ˈwʊstər.ʃər` 
-5. System plays back the pronunciation
-6. You save it to the database
+1) System prompts to record
+2) You pronounce "Worcestershire"
+3) System generates an approximation (e.g., `wʊstərʃər`)
+4) You can edit to: `ˈwʊstər.ʃər`
+5) Playback for confirmation
+6) Save to your personal dictionary
 
-### Batch Processing
-For multiple words, use interactive mode:
+LLM Coaching with baseline:
 ```bash
-python -m texttospeech.cli.phonetics_cli --interactive
+phonetics --coach "Worcestershire" --coach-record
 ```
-Then select option 1 repeatedly for each word.
 
-## License
+Batch entry (manual) – use interactive mode and select option 1 repeatedly:
+```bash
+phonetics --interactive
+```
 
-This tool is part of the TextToSpeech project. See LICENSE file for details.
+## Related
+
+- Architecture and data flows: [docs/architecture.md](docs/architecture.md)
+- Unified playback implementation: [InteractivePhoneticManager._play_phonetic_unified()](src/texttospeech/phonetics/phonetic_word_manager.py:308), [ModalityToSpeech.synthesize_single_segment()](src/texttospeech/processing/modality_to_speech.py:177)
+- CLI entrypoints:
+  - tts → [main()](src/texttospeech/cli/tts_cli.py:310)
+  - phonetics → [main()](src/texttospeech/cli/phonetics_cli.py:62)

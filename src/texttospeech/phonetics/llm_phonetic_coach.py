@@ -171,6 +171,7 @@ class LLMPhoneticCoach:
         print("  'save 3' - Save option number 3")
         print("  'save [ipa:phonetic]' - Save specific phonetic notation")
         print("  'play <phonetics>' - Test custom pronunciation")
+        print("  'record' - Record a 3-second baseline attempt and add it as option")
         print("  Or describe what you want...")
         print("-" * 50)
     
@@ -379,6 +380,11 @@ class LLMPhoneticCoach:
                 existing_context += f"- {entry['phonetic']} ({entry['source']})\n"
             existing_context += "ALWAYS include existing dictionary entries and comment that previous entries were found. If you feel these are imperfect, add variations. If they sound correct, show dictionary items only."
         
+        # Include user-recorded baseline context if available
+        baseline_context = ""
+        if hasattr(self, '_last_recorded_baseline') and self._last_recorded_baseline:
+            baseline_context = f"\nUser recorded baseline phonetics: {self._last_recorded_baseline}"
+        
         # Check if this is a save intent context
         is_save_intent = context.startswith('save_intent:')
         
@@ -489,7 +495,8 @@ Current word: "{word}"
 Context: {context}
 {conversation_context}
 {last_option_context}
-{existing_context}"""
+{existing_context}
+{baseline_context}"""
 
         user_prompt = f"Help with pronunciation coaching for '{word}' in context '{context}'. We're iterating to find the perfect phonetic representation." 
 
@@ -730,6 +737,11 @@ Context: {context}
                         print("❌ Please specify a valid option number (e.g., 'try option 2')")
                     continue
 
+                # Handle live recording command
+                if user_input.lower() == 'record':
+                    self.record_baseline_during_session()
+                    continue
+
                 # Add user input to conversation history
                 self.conversation_history.append(f"User: {user_input}")
 
@@ -961,6 +973,14 @@ Context: {context}
                 # Handle empty input - just continue
                 if not feedback:
                     return success
+
+                # Handle 'record' during feedback prompt (voice capture)
+                if feedback.lower() == 'record':
+                    try:
+                        self.record_baseline_during_session()
+                    except Exception as rec_e:
+                        print(f"❌ Recording failed: {rec_e}")
+                    return success
                 
                 # Handle numbered input - play that option directly (like main loop)
                 if feedback.isdigit():
@@ -997,6 +1017,88 @@ Context: {context}
 
 
 
+    def record_baseline_during_session(self) -> None:
+        """Record a user attempt mid-session, extract phonetics, normalize, inject, and replay once."""
+        try:
+            mgr = self.phonetic_manager
+
+            # Ensure required components exist
+            if not hasattr(mgr, 'recorder'):
+                print("❌ Recording not available")
+                return
+            if not hasattr(mgr, 'extractor'):
+                print("❌ Phonetic extractor not available")
+                return
+
+            print("\n🎤 Recording a baseline attempt...")
+            audio_file = mgr.recorder.record_word(duration=3.0)
+            if not audio_file:
+                print("❌ Recording failed")
+                return
+            try:
+                result = mgr.extractor.extract_phonetics_from_audio(
+                    audio_file, expected_word=self.current_word
+                )
+                if not result:
+                    print("❌ Could not extract phonetics from recording")
+                    return
+
+                recognized_text, phonetic = result
+
+                # Normalize wrapper via lookup manager when available
+                wrapped = phonetic
+                try:
+                    if hasattr(mgr, 'lookup_manager') and hasattr(mgr.lookup_manager, '_normalize_and_wrap'):
+                        wrapped = mgr.lookup_manager._normalize_and_wrap(phonetic)
+                except Exception:
+                    wrapped = phonetic
+
+                # Fallback wrap if not tagged
+                s = wrapped.strip()
+                if not (s.startswith('[') and s.endswith(']') and ':' in s):
+                    try:
+                        if validate_phonetic_notation(s):
+                            wrapped = f"[ipa:{s}]"
+                        else:
+                            wrapped = f"[pron:{s}]"
+                    except Exception:
+                        wrapped = f"[ipa:{s}]"
+
+                # Deduplicate by core and prepend recorded option
+                core = wrapped
+                if core.startswith('[') and core.endswith(']') and ':' in core:
+                    core = core.split(':', 1)[1][:-1]
+
+                existing_cores = set()
+                for opt in self.current_options:
+                    ss = opt.phonetic.strip()
+                    cc = ss.split(':', 1)[1][:-1] if ss.startswith('[') and ss.endswith(']') and ':' in ss else ss
+                    existing_cores.add(cc)
+
+                if core not in existing_cores:
+                    self.current_options.insert(0, PhoneticOption(description="Recorded baseline", phonetic=wrapped))
+                    print("🎼 Added recorded baseline as option 1.")
+
+                # Track state for prompt augmentation
+                self._last_recorded_baseline = wrapped
+
+                # Auto-play once for confirmation
+                self._test_pronunciation(wrapped, show_header=True, option_number=1)
+
+                # Re-display current options
+                if self.current_options:
+                    print(f"\nHere are the current phonetic options for '{self.current_word}':")
+                    for i, option in enumerate(self.current_options, 1):
+                        print(f"  {i}. {option.phonetic} - {option.description}")
+            finally:
+                try:
+                    import os
+                    if 'audio_file' in locals() and audio_file:
+                        os.remove(audio_file)
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"❌ Error during recording: {e}")
     def _suggest_variations(self, base_phonetic: str) -> None:
         """Suggest variations on a phonetic pronunciation."""
         variations_response = {

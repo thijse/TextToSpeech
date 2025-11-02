@@ -4,409 +4,219 @@ applyTo: '/**'
 
 # TextToSpeech - Installation and Build Instructions
 
-This document provides guidance for setting up, building, and running the TextToSpeech application. This system converts text, Markdown, and PowerPoint presentations to speech using Azure or ElevenLabs TTS services.
+This document provides guidance for setting up, building, and running the TextToSpeech application. The system converts Markdown documents and PowerPoint presentations to speech using Azure Speech or ElevenLabs TTS services, with optional phonetic coaching and dictionary overlays.
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Project Architecture](#project-architecture)
-3. [Quick Start](#quick-start)
-4. [Build Scripts](#build-scripts)
-5. [Development Workflow](#development-workflow)
-6. [Configuration](#configuration)
-7. [Troubleshooting](#troubleshooting)
+1. Prerequisites
+2. Quick Start
+3. Console Scripts
+4. Development Workflow
+5. Configuration
+6. Phonetic Lookup Overlay
+7. Troubleshooting
+8. Essential Commands
 
 ## Prerequisites
 
-### Required Tools
-
-1. **Python Environment**
-   - Python 3.10+ 
-   - pip (comes with Python)
-
-2. **TTS Service Credentials**
-   - **Azure**: Speech Service API key and region
-   - **ElevenLabs**: API key (optional, if using ElevenLabs)
-
-### Platform Support
-
-- **Primary Platform**: Windows
-- **Development Shell**: PowerShell or Command Prompt
-
-## Project Architecture
-
-The project follows a hybrid architecture:
-
-```
-igt-procedure-intelligence/
-├── Frontend (TypeScript/React)    # Web UI components
-│   ├── src/                      # React application source
-│   ├── public/                   # Static assets
-│   └── package.json              # Node.js dependencies
-├── Backend (Rust + Python)       # Core application logic
-│   ├── src-tauri/               # Tauri configuration and Rust code
-│   │   ├── python/              # Python backend modules
-│   │   ├── Cargo.toml           # Rust dependencies
-
-## Project Architecture
-
-```
-TextToSpeech/
-├── src/texttospeech/          # Main package
-│   ├── cli/                   # Command-line interfaces
-│   │   ├── tts_cli.py        # Main TTS tool
-│   │   └── phonetics_cli.py  # Phonetic management
-│   ├── tts/                   # TTS backend implementations
-│   │   ├── azure.py          # Azure Speech Service
-│   │   └── elevenlabs.py     # ElevenLabs API
-│   ├── processing/            # Document processing
-│   │   ├── markdown_parser.py
-│   │   └── ppt_processor.py
-│   └── phonetics/             # Phonetic processing
-│       ├── manager.py         # Phonetic lookup
-│       └── processing.py      # SSML generation
-├── config/
-│   ├── config.sample.yaml    # Template configuration
-│   └── config.yaml           # Your settings (gitignored)
-├── data/
-│   ├── phonetic_lookup.json  # Shared pronunciations
-│   └── phonetic_lookup.personal.json  # Your pronunciations (gitignored)
-├── examples/                  # Sample files
-│   ├── sample.md
-│   ├── sample.pptx
-│   └── output/               # Generated audio (gitignored)
-└── build.bat                 # Setup script
-```
-
-### Technology Stack
-
-- **Backend**: Python 3.10+
-- **TTS Services**: Azure Speech Service, ElevenLabs API
-- **Document Processing**: python-pptx, markdown parsing
-- **Phonetic Processing**: SSML, IPA notation
+- Python 3.8+ (project supports 3.8 through 3.12 as configured in [pyproject.toml](pyproject.toml:10-24))
+- A virtual environment tool (built-in venv)
+- Optional TTS credentials:
+  - Azure Speech Service: API key and region
+  - ElevenLabs: API key
 
 ## Quick Start
 
-### First-Time Setup
+Recommended: editable install via pyproject with console scripts.
+
+Windows PowerShell:
 
 ```powershell
-# 1. Clone the repository (if not already done)
-git clone <repository-url>
-cd TextToSpeech
+# 1. Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\Activate.ps1
 
-# 2. Run build script (creates venv and installs dependencies)
-.\build.bat
+# 2. Upgrade pip and install project in editable mode
+python -m pip install --upgrade pip
+python -m pip install -e .
 
-# 3. Activate the virtual environment
-.\.venv\Scripts\activate
+# 3. (Optional) install dev dependencies
+python -m pip install -e ".[dev]"
 
 # 4. Copy and configure settings
 copy config\config.sample.yaml config\config.yaml
 # Edit config\config.yaml with your Azure/ElevenLabs credentials
 
-# 5. Test the installation
-python -m texttospeech.cli.tts_cli --help
+# 5. Verify console scripts
+tts --help
+phonetics --help
 ```
 
-### Manual Setup
+macOS/Linux:
 
-If you prefer step-by-step installation:
+```bash
+python -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -e ".[dev]"  # optional
+
+cp config/config.sample.yaml config/config.yaml
+tts --help
+phonetics --help
+```
+
+Alternative (module-run form):
 
 ```powershell
-# 1. Create virtual environment
-python -m venv .venv
-
-# 2. Activate virtual environment
-.\.venv\Scripts\activate
-
-# 3. Install base dependencies
-pip install -r requirements.txt
-
-# 4. Install phonetic features (optional)
-pip install -r requirements_phonetic.txt
-
-# 5. Configure
-copy config\config.sample.yaml config\config.yaml
+python -m texttospeech.cli.tts_cli --help
+python -m texttospeech.cli.phonetics_cli --help
 ```
 
-## Build Scripts
+## Console Scripts
 
-### `build.bat` - Setup and Install
+Console aliases are defined under [project.scripts](pyproject.toml:47-50):
 
-**When to use**: First setup, after pulling changes, or when dependencies change
+- tts → [main()](src/texttospeech/cli/tts_cli.py:310)
+- phonetics → [main()](src/texttospeech/cli/phonetics_cli.py:62)
 
-**What it does**:
-- Creates Python virtual environment (if missing)
-- Activates the environment
-- Installs all dependencies from requirements.txt
-- Installs optional phonetic dependencies from requirements_phonetic.txt
+Examples:
 
-**Process flow**:
-```batch
-1. Check/create .venv directory
-2. Create virtual environment
-3. Activate environment
-4. Install base requirements
-5. Install phonetic requirements (if present)
+```powershell
+# List voices (concise)
+tts --service azure --voices-short
+
+# Process Markdown
+tts --md examples\sample.md --voice en-US-JennyNeural --overwrite-audio
+
+# Process PowerPoint
+tts --ppt examples\sample.pptx --voice en-US-JennyNeural
+
+# Phonetic manager interactive mode
+phonetics --interactive
+
+# LLM coaching with baseline recording
+phonetics --coach "Worcestershire" --coach-record
 ```
 
 ## Development Workflow
 
-### Environment Activation
+- Always activate your virtual environment before running commands:
+  - Windows: venv\Scripts\Activate.ps1
+  - macOS/Linux: source venv/bin/activate
 
-**Always activate before running commands:**
+- Update dependencies after pulling changes:
+  - python -m pip install -e .
+  - python -m pip install -e ".[dev]"  # optional
 
-```powershell
-# PowerShell/Command Prompt
-.\.venv\Scripts\activate
-
-# You should see (.venv) in your prompt
-```
-
-### Daily Development
-
-```powershell
-# 1. Activate environment
-.\.venv\Scripts\activate
-
-# 2. Run commands (examples below)
-python -m texttospeech.cli.tts_cli --help
-python -m texttospeech.cli.phonetics_cli --help
-
-# 3. After pulling new changes
-pip install -r requirements.txt
-pip install -r requirements_phonetic.txt
-```
-
-### Common Tasks
-
-**List available voices:**
-```powershell
-python -m texttospeech.cli.tts_cli --voices
-python -m texttospeech.cli.tts_cli --voices-short  # Condensed view
-```
-
-**Convert Markdown to speech:**
-```powershell
-python -m texttospeech.cli.tts_cli --md examples\sample.md --output-dir examples\output
-```
-
-**Convert PowerPoint to speech:**
-```powershell
-python -m texttospeech.cli.tts_cli --ppt examples\sample.pptx --output-dir examples\output
-```
-
-**Manage phonetic pronunciations:**
-```powershell
-python -m texttospeech.cli.phonetics_cli --interactive
-python -m texttospeech.cli.phonetics_cli --list
-python -m texttospeech.cli.phonetics_cli --coach tomato
-```
+- Run tests (if dev extras are installed):
+  - pytest tests/ -v
 
 ## Configuration
 
-### Configuration File
+Edit [config/config.yaml](config/config.yaml) (copy from [config/config.sample.yaml](config/config.sample.yaml:1)):
 
-Edit `config/config.yaml` with your credentials:
+Minimal example:
 
 ```yaml
-azure:
-  api_key: "YOUR_AZURE_KEY"
-  region: "eastus"
+tts_service: "azure"  # Options: "elevenlabs", "azure"
 
 elevenlabs:
-  api_key: "YOUR_ELEVENLABS_KEY"
+  api_key: "your_api_key_here"
+  voice_name: "Sarah"
+  model_id: "eleven_monolingual_v1"
 
-default_voice: "en-US-JennyNeural"
-output_format: "mp3"
+azure:
+  api_key: "<Azure API key>"
+  region: "eastus"
+  voice_name: "en-US-JennyNeural"
+
+azure_openai:
+  endpoint: "https://your-resource-name.openai.azure.com/"
+  api_key: "your-azure-openai-api-key-here"
+  api_version: "2025-04-01-preview"
+  deployment_name: "gpt-5"
+  model: "gpt-5"
+  max_tokens: 1000
+  temperature: 1.0
+  enable_fallback: true
+
+output:
+  format: "mp3"   # mp3, wav, ogg, webm
+  quality: "high" # high, medium, low
 ```
 
-### Environment Variables
-
-Alternatively, use environment variables:
+Environment variables (Azure Speech):
 
 ```powershell
-# Azure credentials
 $env:AZURE_SPEECH_KEY = "your-key"
 $env:AZURE_SPEECH_REGION = "eastus"
-
-# ElevenLabs credentials
-$env:ELEVENLABS_API_KEY = "your-key"
 ```
 
-### Phonetic Lookup Files
+The TTS CLI also reads legacy env names: SPEECH_KEY/SPEECH_REGION and AZURE_TTS_KEY/AZURE_TTS_REGION (see [main()](src/texttospeech/cli/tts_cli.py:388-396)).
 
-Two lookup files for custom pronunciations:
+## Phonetic Lookup Overlay
 
-1. **Shared (tracked)**: `data/phonetic_lookup.json`
-   - Team-shared pronunciations
-   - Committed to repository
+Pronunciation dictionaries use overlay semantics managed by [PhoneticLookupManager](src/texttospeech/phonetics/manager.py:50):
 
-2. **Personal (gitignored)**: `data/phonetic_lookup.personal.json`
-   - Your personal pronunciations
-   - Overrides shared entries
-   - Not committed
+- Shared (tracked): [data/phonetic_lookup.json](data/phonetic_lookup.json)
+- Personal (gitignored): data/phonetic_lookup.personal.json
 
-The system automatically merges both files, with personal entries taking precedence.
+Personal entries override shared entries; CRUD writes go only to the personal file. The manager also normalizes wrapper tags to [ipa:...] or [pron:...] for consistent processing.
+
+LLM Phonetic Coach integrates unified playback and dictionary-aware suggestions:
+- CLI flags: --coach WORD and optional --coach-record for baseline (see [phonetics CLI options](src/texttospeech/cli/phonetics_cli.py:98-106))
+- Baseline injection and Azure OpenAI setup: [LLMPhoneticCoach._setup_azure_openai()](src/texttospeech/phonetics/llm_phonetic_coach.py:111)
+- Unified playback pipeline: [InteractivePhoneticManager._play_phonetic_unified()](src/texttospeech/phonetics/phonetic_word_manager.py:308) → [ModalityToSpeech.synthesize_single_segment()](src/texttospeech/processing/modality_to_speech.py:177)
 
 ## Troubleshooting
 
-### Common Issues
+- Module not found:
+  - Ensure the venv is activated and project installed: python -m pip install -e .
 
-**Issue: "Module not found" errors**
-```powershell
-# Solution: Ensure environment is activated and dependencies installed
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-```
+- Azure credentials missing:
+  - Set azure.api_key and azure.region in config, or use environment variables
+  - TTS CLI credential validation: [main()](src/texttospeech/cli/tts_cli.py:383-404)
 
-**Issue: "Invalid API key" or credential errors**
-```powershell
-# Solution: Check config/config.yaml or environment variables
-# Verify credentials are correct for your service
-```
+- ElevenLabs key missing:
+  - Set elevenlabs.api_key in config/config.yaml
+  - Validation: [main()](src/texttospeech/cli/tts_cli.py:407-417)
 
-**Issue: Audio generation fails**
-```powershell
-# Solution: Check output directory exists and is writable
-mkdir examples\output
-```
+- Audio generation or output directory issues:
+  - Ensure the output directory exists and is writable
+  - See Markdown/PPT processing flows: [ModalityToSpeech.process_markdown_document()](src/texttospeech/processing/modality_to_speech.py:34) and [process_powerpoint()](src/texttospeech/processing/modality_to_speech.py:306)
 
-**Issue: PowerPoint processing fails**
-```powershell
-# Solution: Ensure PowerPoint file is not open in another program
-# Check file permissions
-```
+- LLM coach configuration:
+  - Install OpenAI SDK is included via [pyproject dependencies](pyproject.toml:27-38)
+  - Configure azure_openai placeholder values; the coach intentionally avoids initialization when API key is "your-azure-openai-api-key-here" or endpoint contains "your-resource-name" (see [LLMPhoneticCoach._setup_azure_openai()](src/texttospeech/phonetics/llm_phonetic_coach.py:121-130))
 
-### Debug Mode
-
-Enable verbose logging:
-
-```powershell
-# Set environment variable for detailed output
-$env:TEXTTOSPEECH_DEBUG = "true"
-python -m texttospeech.cli.tts_cli --md examples\sample.md
-```
-
-### Dependency Issues
-
-If you encounter package conflicts:
-
-```powershell
-# Remove and recreate virtual environment
-deactivate
-rmdir /s .venv
-.\build.bat
-```
-
-## Essential Commands Reference
+## Essential Commands
 
 ```powershell
 # Setup
-.\build.bat                                    # First-time setup
-.\.venv\Scripts\activate                      # Activate environment
+python -m venv venv
+venv\Scripts\Activate.ps1
+python -m pip install -e .
+python -m pip install -e ".[dev]"  # optional
+copy config\config.sample.yaml config\config.yaml
+
+# Console scripts
+tts --help
+phonetics --help
 
 # TTS Operations
-python -m texttospeech.cli.tts_cli --voices   # List voices
-python -m texttospeech.cli.tts_cli --md FILE  # Convert Markdown
-python -m texttospeech.cli.tts_cli --ppt FILE # Convert PowerPoint
+tts --voices-short
+tts --md examples\sample.md --voice en-US-JennyNeural
+tts --ppt examples\sample.pptx --voice en-US-JennyNeural
 
-# Phonetic Management
-python -m texttospeech.cli.phonetics_cli --interactive  # Interactive mode
-python -m texttospeech.cli.phonetics_cli --list         # Show all pronunciations
-python -m texttospeech.cli.phonetics_cli --coach WORD   # Get pronunciation help
+# Phonetics Management
+phonetics --interactive
+phonetics --list
+phonetics --coach "Worcestershire" --coach-record
 
-# Maintenance
-pip install -r requirements.txt               # Update dependencies
-deactivate                                    # Exit virtual environment
-```
-
-## Project Structure Details
-
-### CLI Applications
-
-- **`tts_cli.py`**: Main text-to-speech conversion tool
-  - Markdown processing
-  - PowerPoint processing
-  - Voice listing and management
-  - Audio format configuration
-
-- **`phonetics_cli.py`**: Phonetic pronunciation management
-  - Interactive pronunciation editing
-  - LLM-powered pronunciation coaching
-  - Personal phonetic lookup overlay
-
-### Core Modules
-
-- **`tts/`**: TTS backend implementations
-  - Azure Speech Service integration
-  - ElevenLabs API integration
-  - SSML generation and processing
-
-- **`processing/`**: Document processors
-  - Markdown parsing with voice aliases
-  - PowerPoint slide extraction
-  - Text segmentation
-
-- **`phonetics/`**: Phonetic processing
-  - IPA notation validation
-  - SSML phoneme tag generation
-  - Phonetic lookup management
-
-## Getting Help
-
-For detailed usage of specific features:
-
-```powershell
-# General help
+# Module-run fallback
 python -m texttospeech.cli.tts_cli --help
 python -m texttospeech.cli.phonetics_cli --help
-
-# See examples
-dir examples\
-type examples\sample.md
 ```
 
-Refer to `docs/README.md` and `docs/README_phonetic.md` for detailed documentation.
-
-
-## Console scripts (aliases) via pyproject
-
-The project exposes easy-name CLI aliases through [project.scripts](pyproject.toml:47). After an editable install, you can run the tools directly as commands.
-
-- Aliases:
-  - tts → [main()](src/texttospeech/cli/tts_cli.py:310)
-  - phonetics → [main()](src/texttospeech/cli/phonetics_cli.py:59)
-
-Steps (Windows PowerShell):
-1) Create and activate a virtual environment
-   - python -m venv .venv
-   - .\.venv\Scripts\Activate.ps1
-2) Install the project (editable)
-   - python -m pip install --upgrade pip
-   - python -m pip install -e .
-3) Use the console scripts
-   - tts --help
-   - phonetics --help
-   - Examples:
-     - tts --service azure --voices-short voices_short.txt
-     - tts --md examples\sample.md --voice en-US-JennyNeural --overwrite-audio
-     - phonetics --interactive
-     - phonetics --coach "Worcestershire" --coach-record
-
-Notes:
-- Without activating the venv, you can call the executables directly:
-  - .\.venv\Scripts\tts.exe --help
-  - .\.venv\Scripts\phonetics.exe --help
-- On macOS/Linux:
-  - source .venv/bin/activate
-  - tts --help
-  - phonetics --help
-- Alternative (no install): module-run form
-  - python -m texttospeech.cli.tts_cli --help
-  - python -m texttospeech.cli.phonetics_cli --help
-
-Reference:
-- Configuration and packaging are defined in [pyproject.toml](pyproject.toml)
-- TTS CLI entrypoint: [main()](src/texttospeech/cli/tts_cli.py:310)
-- Phonetics CLI entrypoint: [main()](src/texttospeech/cli/phonetics_cli.py:59)
+For architectural details, data flows, and extension points, see [docs/architecture.md](docs/architecture.md).
