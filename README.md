@@ -399,7 +399,7 @@ modality_processor.process_markdown_document(
   - Example: `# Section Name` → `## Subsection Name` → `section_name_subsection_name.mp3`
   - Example: `# Chapter 1` → `chapter_1.mp3` (numbers are preserved in filenames)
   - Example: `# Section 2.3: Advanced Topics` → `section_2_3_advanced_topics.mp3`
-- **Flexible syntax**: Parameters can be separated by spaces or commas: `{file=output.mp3, voice=Aria}` or `{file=output.mp3 voice=Aria}`
+
 
 This will:
 
@@ -433,3 +433,56 @@ This implementation includes support for ElevenLabs and Azure TTS backends, but 
 - Additional TTS backends (Google Cloud TTS, Amazon Polly, etc.)
 - Voice customization and fine-tuning
 - Batch processing for multiple files
+## Timed cues and scheduled starts
+
+The markdown dialect supports scheduled start times for narration to align audio with external timelines (e.g., video). This includes explicit tags and bare timestamp lines, a section-level clock reset, and a default overflow policy.
+
+Accepted syntax
+- Explicit tag: [start:MM:SS(.mmm)] or [start:Ns] schedules the next text block (until the next blank line).
+- Bare timestamp line: a line containing “MM:SS(.mmm)” or “Ns” acts identically to [start:…] for the following paragraph.
+- Reset: [timestamp_reset] resets the section’s clock to 0. The clock also resets implicitly at the start of each file and at every “## …” section.
+
+Overflow policy (default: skip)
+- If a synthesized clip would overlap a later requested start, skip the intervening text until encountering a cue with a start strictly after the current end.
+- Non‑monotonic cues (start ≤ current clock) are ignored under skip policy.
+
+Example (bare timestamps)
+```markdown
+# Chapter 1
+
+[alias:Narrator=en-US-JennyNeural]
+
+## Introduction
+
+[voice:Narrator]
+
+0:04
+In today's interventional lab, clinicians face growing complexity, staff shortages, and the constant pressure to deliver more without compromise.
+
+0:16
+Our customers tell us they need technology that truly helps making procedures safer, faster, and more consistent while reducing administrative burden.
+```
+
+Equivalent example (explicit tags)
+```markdown
+## Introduction
+
+[voice:Narrator]
+
+[start:0:04]
+In today's interventional lab, clinicians face growing complexity, staff shortages, and the constant pressure to deliver more without compromise.
+
+[start:16s]
+Our customers tell us they need technology that truly helps making procedures safer, faster, and more consistent while reducing administrative burden.
+```
+
+Renderer implications
+- Clips are pre‑synthesized to obtain actual durations, then scheduled against the section clock.
+- When desired_start > current_end, silence is inserted for desired_start − current_end before placing the clip.
+- Untimed text before any cue renders sequentially; after the first cue, untimed text may be skipped when overflow skip applies.
+
+References
+- Parser (tags and bare timestamp lines): [python.MarkdownParser.split_into_voice_segments()](src/texttospeech/processing/markdown_parser.py:96)
+- Section parsing and alias handling: [python.MarkdownParser.parse()](src/texttospeech/processing/markdown_parser.py:182)
+- Scheduler and overflow skip behavior: [python.ModalityToSpeech.process_markdown_document()](src/texttospeech/processing/modality_to_speech.py:34)
+- Full spec and authoring guidelines: [markdown.enhanced_markdown.md](docs/enhanced_markdown.md:49)

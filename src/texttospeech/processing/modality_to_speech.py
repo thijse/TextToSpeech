@@ -76,16 +76,18 @@ class ModalityToSpeech:
                     results[output_path] = True
                     continue
 
-                # Synthesize each segment and collect temp file paths
-                temp_files = []
-                segment_success = []
+                # Synthesize each segment and collect entries with timing metadata
+                # Maintain index alignment with section.segments for scheduling later
+                entries: List[Dict[str, Any]] = []
                 for j, segment in enumerate(section.segments):
-                    if not segment.text.strip():
+                    if not getattr(segment, "text", "").strip():
+                        entries.append({"success": False, "temp_path": None, "start_ms": getattr(segment, "start_ms", None)})
                         continue
-                    # Use the segment's voice, or fallback to default
-                    voice_name = segment.voice or default_voice_name
-                    
-                    # Apply phonetic processing if the processor is available
+
+                    # Resolve voice per segment (fallback to default)
+                    voice_name = getattr(segment, "voice", None) or default_voice_name
+
+                    # Apply phonetic processing if available
                     text_to_speak = segment.text
                     is_ssml = False
                     if self.phonetic_processor:
@@ -98,72 +100,142 @@ class ModalityToSpeech:
                             # Fallback to original text
                             text_to_speak = segment.text
                             is_ssml = False
-                    
-                    # Create a temp file for this segment
+
+                    # Create temp file target
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tf:
                         temp_path = tf.name
-                    success = self.tts_client.text_to_speech(
+
+                    ok = self.tts_client.text_to_speech(
                         text=text_to_speak,
                         voice_name=voice_name,
                         output_path=temp_path,
                         output_format=output_format,
                         is_ssml=is_ssml
                     )
-                    segment_success.append(success)
-                    if success:
-                        temp_files.append(temp_path)
-                    else:
-                        print(f"Failed to synthesize segment {j+1} in section '{section.title}' with voice '{voice_name}'.")
 
-                # Concatenate all temp files into the final output
-                if all(segment_success) and temp_files:
-                    try:
-                        # Concatenate audio files using soundfile and numpy
-                        audio_data = []
-                        sample_rate = None
-                        
-                        # Read all audio files
-                        for temp_path in temp_files:
-                            data, rate = sf.read(temp_path)
-                            if sample_rate is None:
-                                sample_rate = rate
-                            elif rate != sample_rate:
-                                print(f"Warning: Sample rate mismatch in {temp_path}. Expected {sample_rate}, got {rate}")
-                            audio_data.append(data)
-                        
-                        # Concatenate audio data
-                        if audio_data:
-                            combined_audio = np.concatenate(audio_data)
-                            
-                            # Create output directory if it doesn't exist
-                            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-                            
-                            # Write the combined audio to the output file
-                            sf.write(output_path, combined_audio, sample_rate)
-                            print(f"Section audio saved to: {output_path}")
-                            results[output_path] = True
-                        else:
-                            print(f"No audio data to concatenate for section '{section.title}'")
-                            results[output_path] = False
-                    except Exception as e:
-                        print(f"Error concatenating audio for section '{section.title}': {e}")
-                        results[output_path] = False
-                    finally:
-                        # Clean up temp files
-                        for temp_path in temp_files:
-                            try:
-                                os.remove(temp_path)
-                            except Exception:
-                                pass
-                else:
-                    print(f"Section '{section.title}' failed: not all segments could be synthesized.")
-                    results[output_path] = False
-                    # Clean up any temp files
-                    for temp_path in temp_files:
+                    if not ok:
+                        print(f"Failed to synthesize segment {j+1} in section '{section.title}' with voice '{voice_name}'.")
+                        # Clean up the failed temp file if created
                         try:
                             os.remove(temp_path)
                         except Exception:
                             pass
+                        entries.append({"success": False, "temp_path": None, "start_ms": getattr(segment, "start_ms", None)})
+                    else:
+                        entries.append({"success": True, "temp_path": temp_path, "start_ms": getattr(segment, "start_ms", None)})
+
+                # Read audio for successful entries and schedule with [start:...] cues (overflow policy = skip)
+                try:
+                    sample_rate = None
+                    channels = None
+
+                    # Load audio for each entry preserving index alignment
+                    for idx, entry in enumerate(entries):
+                        if not entry.get("success"):
+                            entry["audio"] = None
+                            continue
+                        temp_path = entry["temp_path"]
+                        try:
+                            data, rate = sf.read(temp_path)
+                            entry["audio"] = data
+                            entry["rate"] = rate
+                            if sample_rate is None:
+                                sample_rate = rate
+                                channels = data.shape[1] if hasattr(data, "ndim") and getattr(data, "ndim", 1) > 1 else (data.shape[1] if len(getattr(data, "shape", [])) > 1 else 1)
+                            elif rate != sample_rate:
+                                print(f"Warning: Sample rate mismatch in {temp_path}. Expected {sample_rate}, got {rate}")
+                                # Proceed anyway; simple resample not implemented; this may cause drift
+                        except Exception as e:
+                            print(f"Warning: Failed reading temp audio for segment {idx+1}: {e}")
+                            entry["audio"] = None
+
+                    if sample_rate is None:
+                        print(f"No audio data to assemble for section '{section.title}'")
+                        results[output_path] = False
+                    else:
+                        # Helper to create silence buffer
+                        def make_silence(n_samples: int):
+                            if n_samples <= 0:
+                                return None
+                            if channels and channels != 1:
+                                return np.zeros((n_samples, channels), dtype=np.float32)
+                            return np.zeros(n_samples, dtype=np.float32)
+
+                        def ms_to_samples(ms: int) -> int:
+                            return int(round((ms / 1000.0) * sample_rate))
+
+                        combined_chunks: List[np.ndarray] = []
+                        current_end = 0  # in samples
+                        skip_mode = False  # when True, skip untimed segments until a timed cue after current_end
+
+                        # Build a list of indices for cleanup of temp files after scheduling
+                        temp_paths_to_cleanup = [e["temp_path"] for e in entries if e.get("success") and e.get("temp_path")]
+
+                        for idx, entry in enumerate(entries):
+                            audio = entry.get("audio", None)
+                            if audio is None:
+                                continue  # failed synthesis or read; skip
+                            seg = section.segments[idx]
+                            start_ms = getattr(seg, "start_ms", None)
+                            seg_len = len(audio)
+
+                            if start_ms is not None:
+                                desired_start = ms_to_samples(int(start_ms))
+                                if desired_start <= current_end:
+                                    # Overflow; skip this timed segment and enter skip mode
+                                    skip_mode = True
+                                    continue
+                                # This timed cue is after current_end; exit skip mode if set
+                                if skip_mode:
+                                    skip_mode = False
+                                # Insert silence if gap exists
+                                gap = desired_start - current_end
+                                if gap > 0:
+                                    silence = make_silence(gap)
+                                    if silence is not None:
+                                        combined_chunks.append(silence)
+                                combined_chunks.append(audio)
+                                current_end = desired_start + seg_len
+                            else:
+                                # Untimed segment
+                                if skip_mode:
+                                    # Skip untimed text until we hit a timed cue after current_end
+                                    continue
+                                # Append immediately at current_end
+                                combined_chunks.append(audio)
+                                current_end += seg_len
+
+                        if len(combined_chunks) == 0:
+                            print(f"No scheduled audio produced for section '{section.title}'")
+                            results[output_path] = False
+                        else:
+                            combined_audio = np.concatenate(combined_chunks) if len(combined_chunks) > 1 else combined_chunks[0]
+                            # Ensure output directory exists
+                            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                            sf.write(output_path, combined_audio, sample_rate)
+                            print(f"Section audio saved to: {output_path}")
+                            results[output_path] = True
+
+                    # Cleanup all temp files
+                    for entry in entries:
+                        tp = entry.get("temp_path")
+                        if tp:
+                            try:
+                                os.remove(tp)
+                            except Exception:
+                                pass
+
+                except Exception as e:
+                    print(f"Error assembling scheduled audio for section '{section.title}': {e}")
+                    results[output_path] = False
+                    # Cleanup any remaining temp files
+                    for entry in entries:
+                        tp = entry.get("temp_path")
+                        if tp:
+                            try:
+                                os.remove(tp)
+                            except Exception:
+                                pass
 
             # Print summary
             successful = sum(1 for success in results.values() if success)
