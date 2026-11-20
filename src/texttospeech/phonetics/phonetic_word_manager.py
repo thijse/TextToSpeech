@@ -13,7 +13,6 @@ import re
 import tempfile
 import time
 from typing import Dict, Optional, List, Tuple
-import azure.cognitiveservices.speech as speechsdk
 import sounddevice as sd
 import soundfile as sf
 from datetime import datetime
@@ -21,8 +20,7 @@ import yaml
 
 # Use overlay-capable lookup manager (general + personal)
 from texttospeech.phonetics.manager import PhoneticLookupManager
-# Use canonical AzureTTS for basic configuration (voice selection etc.)
-from texttospeech.tts.azure import AzureTTS
+from texttospeech.tts.cfi import CfiSpeechTTS, load_cfi_settings, make_openai_client
  
 
 class PhoneticEntry:
@@ -118,54 +116,55 @@ class PhoneticExtractor:
             Tuple of (recognized_text, phonetic_transcription) or None if failed
         """
         try:
-            # Create speech config
-            speech_config = speechsdk.SpeechConfig(
-                subscription=self.api_key, 
-                region=self.region
-            )
-            
-            # Enable detailed recognition results to get phonetic info
-            speech_config.request_word_level_timestamps()
-            speech_config.output_format = speechsdk.OutputFormat.Detailed
-            
-            # Create audio config from file
-            audio_config = speechsdk.audio.AudioConfig(filename=audio_file_path)
-            
-            # Create speech recognizer
-            speech_recognizer = speechsdk.SpeechRecognizer(
-                speech_config=speech_config, 
-                audio_config=audio_config
-            )
-            
             print("🔍 Analyzing audio for phonetics...")
-            
-            # Perform recognition
-            result = speech_recognizer.recognize_once()
-            
-            if result.reason == speechsdk.ResultReason.RecognizedSpeech:
-                recognized_text = result.text.strip().lower().rstrip('.')
-                
-                # Generate phonetic approximation (placeholder heuristic)
-                phonetic = self._text_to_ipa_approximation(recognized_text)
-                
-                print(f"✅ Recognized: '{recognized_text}'")
-                
-                # Validate against expected word if provided
-                if expected_word and expected_word.lower() not in recognized_text:
-                    print(f"⚠️  Warning: Expected '{expected_word}' but recognized '{recognized_text}'")
-                
-                return recognized_text, phonetic
-                
-            else:
-                print(f"❌ Speech recognition failed: {result.reason}")
-                if result.reason == speechsdk.ResultReason.Canceled:
-                    cancellation_details = speechsdk.CancellationDetails(result)
-                    print(f"   Error details: {cancellation_details.reason}")
+            recognized_text = self._recognize_text(audio_file_path)
+            if recognized_text is None:
                 return None
-                
+            recognized_text = recognized_text.strip().lower().rstrip('.')
+
+            # Generate phonetic approximation (placeholder heuristic)
+            phonetic = self._text_to_ipa_approximation(recognized_text)
+
+            print(f"✅ Recognized: '{recognized_text}'")
+
+            # Validate against expected word if provided
+            if expected_word and expected_word.lower() not in recognized_text:
+                print(f"⚠️  Warning: Expected '{expected_word}' but recognized '{recognized_text}'")
+
+            return recognized_text, phonetic
+
         except Exception as e:
             print(f"❌ Error extracting phonetics: {e}")
             return None
+
+    def _recognize_text(self, audio_file_path: str) -> Optional[str]:
+        """Recognize the spoken text with Azure Speech; None when nothing was recognized."""
+        import azure.cognitiveservices.speech as speechsdk
+
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.api_key,
+            region=self.region
+        )
+
+        # Enable detailed recognition results to get phonetic info
+        speech_config.request_word_level_timestamps()
+        speech_config.output_format = speechsdk.OutputFormat.Detailed
+
+        audio_config = speechsdk.audio.AudioConfig(filename=audio_file_path)
+        speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            audio_config=audio_config
+        )
+
+        result = speech_recognizer.recognize_once()
+        if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+            return result.text
+
+        print(f"❌ Speech recognition failed: {result.reason}")
+        if result.reason == speechsdk.ResultReason.Canceled:
+            cancellation_details = speechsdk.CancellationDetails(result)
+            print(f"   Error details: {cancellation_details.reason}")
+        return None
     
     def _text_to_ipa_approximation(self, text: str) -> str:
         """
@@ -196,23 +195,51 @@ class PhoneticExtractor:
         return result
 
 
+class CfiPhoneticExtractor(PhoneticExtractor):
+    """Extracts phonetics from audio using a CFI Lab transcription model."""
+
+    def __init__(self, openai_client, model: str = "gpt-4o-mini-transcribe"):
+        self.client = openai_client
+        self.model = model
+
+    def _recognize_text(self, audio_file_path: str) -> Optional[str]:
+        with open(audio_file_path, "rb") as f:
+            audio = f.read()
+        result = self.client.audio.transcriptions.create(
+            model=self.model,
+            file=(os.path.basename(audio_file_path), audio, "audio/wav"),
+        )
+        if not (result.text or "").strip():
+            print("❌ Speech recognition failed: no speech recognized")
+            return None
+        return result.text
+
+
 class InteractivePhoneticManager:
     """Interactive manager for phonetic word recording and management."""
     
     def __init__(self, config_path: str = "config/config.yaml"):
         self.config = self._load_config(config_path)
-        
-        # Initialize Azure components
-        azure_config = self.config.get("azure", {})
-        self.azure_api_key = azure_config.get("api_key")
-        self.azure_region = azure_config.get("region")
-        
-        if not self.azure_api_key or not self.azure_region:
-            raise ValueError("Azure API key and region must be configured in config/config.yaml")
-        
-        # Initialize components
+        self.tts_service = str(self.config.get("tts_service", "azure")).lower()
         self.recorder = AudioRecorder()
-        self.extractor = PhoneticExtractor(self.azure_api_key, self.azure_region)
+
+        if self.tts_service == "cfi":
+            self.cfi_settings = load_cfi_settings(self.config)
+            if not self.cfi_settings["api_key"]:
+                raise ValueError("CFI Lab API key missing: set cfi.api_key or cfi.env_file in config/config.yaml, "
+                                 "or the LITELLM_API_KEY environment variable")
+            self.extractor = CfiPhoneticExtractor(make_openai_client(self.cfi_settings),
+                                                  self.cfi_settings["transcribe_model"])
+        else:
+            azure_config = self.config.get("azure", {})
+            self.azure_api_key = azure_config.get("api_key")
+            self.azure_region = azure_config.get("region")
+
+            if not self.azure_api_key or not self.azure_region:
+                raise ValueError("Azure API key and region must be configured in config/config.yaml")
+
+            self.extractor = PhoneticExtractor(self.azure_api_key, self.azure_region)
+
         # Overlay-aware manager (tracked general + personal override)
         self.lookup_manager = PhoneticLookupManager(
             general_path="data/phonetic_lookup.json",
@@ -234,15 +261,21 @@ class InteractivePhoneticManager:
     def _init_tts(self):
         """Initialize TTS client for phonetic playback."""
         try:
-            azure_config = self.config.get("azure", {})
-            voice_name = azure_config.get("voice_name", "en-US-JennyNeural")
-            
-            # Keep an AzureTTS instance primarily to honor configured voice
-            self.tts_client = AzureTTS(
-                api_key=self.azure_api_key,
-                region=self.azure_region,
-                voice_name=voice_name
-            )
+            if self.tts_service == "cfi":
+                self.tts_client = CfiSpeechTTS.from_settings(self.cfi_settings)
+                voice_name = self.tts_client.voice_name
+            else:
+                from texttospeech.tts.azure import AzureTTS
+
+                azure_config = self.config.get("azure", {})
+                voice_name = azure_config.get("voice_name", "en-US-JennyNeural")
+
+                # Keep an AzureTTS instance primarily to honor configured voice
+                self.tts_client = AzureTTS(
+                    api_key=self.azure_api_key,
+                    region=self.azure_region,
+                    voice_name=voice_name
+                )
             
             print(f"🔊 TTS initialized with voice: {voice_name}")
             

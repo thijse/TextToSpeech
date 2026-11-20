@@ -21,7 +21,7 @@ import yaml
 
 from texttospeech.processing.modality_to_speech import ModalityToSpeech
 from texttospeech.phonetics.processing import PhoneticProcessor
-from texttospeech.tts.azure import AzureTTS
+from texttospeech.tts.cfi import CfiSpeechTTS, load_cfi_settings
 from texttospeech.tts.elevenlabs import ElevenLabsTTS
 
 
@@ -287,7 +287,7 @@ def display_usage():
     print("Usage: python -m texttospeech.cli.tts_cli [options]\n")
     print("Options:")
     print("  --help, -h                  Show this help")
-    print("  --service NAME              Select TTS service (elevenlabs, azure)")
+    print("  --service NAME              Select TTS service (cfi, azure, elevenlabs)")
     print("  --voices [filename]         Save all available voices to a file (default: voices.txt)")
     print("  --voices-short [filename]   Save voices in concise format (default: voices_short.txt)")
     print("  --ppt PATH                  Process a PowerPoint file at PATH")
@@ -312,7 +312,7 @@ def main():
         description="Text-to-Speech CLI (package)",
         add_help=False,
     )
-    parser.add_argument("--service", choices=["elevenlabs", "azure"], help="Select TTS service")
+    parser.add_argument("--service", choices=["cfi", "azure", "elevenlabs"], help="Select TTS service")
     parser.add_argument("--voices", nargs="?", const="voices.txt", help="Save voices to file")
     parser.add_argument("--voices-short", dest="voices_short", nargs="?", const="voices_short.txt", help="Save voices to concise file")
     parser.add_argument("--ppt", metavar="PATH", help="Process a PowerPoint file")
@@ -379,7 +379,18 @@ def main():
         azure_format = "audio-24khz-160kbitrate-mono-mp3"
 
     # Initialize TTS client and defaults
-    if tts_service.lower() == "azure":
+    if tts_service.lower() == "cfi":
+        cfi_settings = load_cfi_settings(config)
+        if not cfi_settings["api_key"]:
+            print("CFI Lab API key missing. Set cfi.api_key or cfi.env_file in config/config.yaml, or the "
+                  "LITELLM_API_KEY environment variable.")
+            return
+        tts_client = CfiSpeechTTS.from_settings(cfi_settings)
+        default_voice = cfi_settings["voice_name"]
+        output_fmt = azure_format
+    elif tts_service.lower() == "azure":
+        from texttospeech.tts.azure import AzureTTS
+
         azure_cfg = config.get("azure", {})
         api_key = azure_cfg.get("api_key")
         region = azure_cfg.get("region")
@@ -422,7 +433,7 @@ def main():
 
     # Create phonetic processor for the backend
     phonetic_processor = PhoneticProcessor(
-        backend="azure" if isinstance(tts_client, AzureTTS) else "elevenlabs",
+        backend="azure" if tts_service.lower() in ("azure", "cfi") else "elevenlabs",
         voice_name=voice_name,
         accepts_ssml=True
     )

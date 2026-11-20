@@ -20,6 +20,7 @@ Package layout under src/:
   - [src/texttospeech/processing/ppt_processor.py](src/texttospeech/processing/ppt_processor.py)
   - [src/texttospeech/processing/modality_to_speech.py](src/texttospeech/processing/modality_to_speech.py)
   - [src/texttospeech/tts/interface.py](src/texttospeech/tts/interface.py)
+  - [src/texttospeech/tts/cfi.py](src/texttospeech/tts/cfi.py)
   - [src/texttospeech/tts/azure.py](src/texttospeech/tts/azure.py)
   - [src/texttospeech/tts/elevenlabs.py](src/texttospeech/tts/elevenlabs.py)
   - [src/texttospeech/phonetics/manager.py](src/texttospeech/phonetics/manager.py)
@@ -40,6 +41,7 @@ Core flows
 1) TTS voice listing and synthesis
 - CLI: [src/texttospeech/cli/tts_cli.py](src/texttospeech/cli/tts_cli.py)
 - TTS service abstraction: [src/texttospeech/tts/interface.py](src/texttospeech/tts/interface.py)
+- CFI Lab backend (default): [src/texttospeech/tts/cfi.py](src/texttospeech/tts/cfi.py) posts to the CFI Lab `/speech/tts` endpoint; SSML is converted to the JsonML the endpoint accepts, and voices come from [data/azure_voices.txt](data/azure_voices.txt)
 - Azure backend: [src/texttospeech/tts/azure.py](src/texttospeech/tts/azure.py)
 - ElevenLabs backend: [src/texttospeech/tts/elevenlabs.py](src/texttospeech/tts/elevenlabs.py)
 - The CLI constructs a TTS client based on config/service flag, then:
@@ -72,8 +74,11 @@ Core flows
 Configuration
 - Global config at [config/config.yaml](config/config.yaml)
 - Select TTS service, default voices, and output formats/quality
+- CFI Lab (tts_service: cfi): one CFI Lab key covers synthesis, transcription for the recorder, and the LLM coach
+  - Key lookup order: cfi.api_key in config.yaml, then the LITELLM_API_KEY environment variable, then the .env file in cfi.env_file
+  - Settings are resolved in [load_cfi_settings()](src/texttospeech/tts/cfi.py:44); the recorder uses CfiPhoneticExtractor and the coach uses _setup_cfi_chat()
 - Azure credentials may also be provided via environment variables AZURE_SPEECH_KEY and AZURE_SPEECH_REGION
-- Azure OpenAI (LLM Coach) configuration:
+- Azure OpenAI (LLM Coach, only when tts_service is not cfi) configuration:
   - Configure azure_openai: { api_key, endpoint, deployment_name, model, api_version } in config.yaml
   - Initialization and validation live in [LLMPhoneticCoach._setup_azure_openai()](src/texttospeech/phonetics/llm_phonetic_coach.py:111)
   - Install SDK: python -m pip install openai
@@ -129,5 +134,6 @@ File summaries under src/texttospeech
 
 - [src/texttospeech/tts/__init__.py](src/texttospeech/tts/__init__.py) — TTS package marker.
 - [src/texttospeech/tts/interface.py](src/texttospeech/tts/interface.py) — Abstract TTSInterface defining text_to_speech and get_voices contracts.
+- [src/texttospeech/tts/cfi.py](src/texttospeech/tts/cfi.py) — CFI Lab TTS client (Azure voices via a CFI Lab key); settings loading, SSML-to-JsonML conversion, static voice catalog.
 - [src/texttospeech/tts/azure.py](src/texttospeech/tts/azure.py) — Azure Speech TTS client; voice retrieval and SSML-based synthesis; output format mapping.
 - [src/texttospeech/tts/elevenlabs.py](src/texttospeech/tts/elevenlabs.py) — ElevenLabs TTS client; synthesis with text hints; model/voice configuration.

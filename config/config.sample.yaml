@@ -1,7 +1,20 @@
 # sample configuration: fill in key(s) and rename to config/config.yaml
 
 # default TTS Service Selection (can be changed in command line)
-tts_service: "azure"  # Options: "elevenlabs", "azure"
+tts_service: "cfi"  # Options: "cfi" (Azure voices via CFI Lab), "azure" (direct), "elevenlabs"
+
+# CFI Lab: Azure neural voices, speech-to-text for the recorder, and the LLM coach.
+# Unset values fall back to the PROXY_BASE_URL / LITELLM_API_KEY / SSL_VERIFY environment
+# variables, then to the same names in env_file.
+cfi:
+  api_key: "<CFI Lab key, sk-...>"
+  # env_file: "D:/Github/shared/.env"  # .env with LITELLM_API_KEY=<CFI Lab key>; keeps the key out of this file
+  # base_url: "https://litellm.cfilab.philips.com"
+  # ssl_verify: false  # needed behind the Philips TLS-inspecting proxy
+  voice_name: "en-GB-AdaMultilingualNeural"  # same voice names as the azure section
+  voice_list: "data/azure_voices.txt"  # the proxy has no voice-list endpoint; used by --voices
+  chat_model: "gpt-5"  # LLM phonetic coach
+  transcribe_model: "gpt-4o-mini-transcribe"  # phonetic recorder
 
 # ElevenLabs Configuration
 elevenlabs:

@@ -110,6 +110,9 @@ class LLMPhoneticCoach:
 
     def _setup_azure_openai(self):
         """Setup Azure OpenAI client if configuration is available."""
+        if str(self.config.get('tts_service', '')).lower() == 'cfi':
+            self._setup_cfi_chat()
+            return
         try:
             if not OPENAI_AVAILABLE:
                 logging.warning("OpenAI library not available.")
@@ -148,6 +151,25 @@ class LLMPhoneticCoach:
             
         except Exception as e:
             logging.error(f"Failed to setup Azure OpenAI: {e}")
+            self.azure_client = None
+
+    def _setup_cfi_chat(self):
+        """Use a CFI Lab chat model; the OpenAI SDK client has the same chat interface as AzureOpenAI."""
+        from texttospeech.tts.cfi import load_cfi_settings, make_openai_client
+
+        try:
+            settings = load_cfi_settings(self.config)
+            if not settings['api_key']:
+                logging.info("CFI Lab API key not configured.")
+                return
+            self.azure_client = make_openai_client(settings)
+            self.model = settings['chat_model']
+            self.deployment_name = self.model
+            self.max_completion_tokens = settings['max_completion_tokens']
+            self.temperature = 1.0
+            self.enable_fallback = True
+        except Exception as e:
+            logging.error(f"Failed to setup CFI Lab chat: {e}")
             self.azure_client = None
 
     def start_coaching_session(self, word: str, baseline: Optional[str] = None) -> None:
@@ -334,6 +356,9 @@ class LLMPhoneticCoach:
         
         if not OPENAI_AVAILABLE:
             error_msg = "❌ LLM Coach not available: OpenAI library not installed. Run 'pip install openai' to enable."
+        elif str(self.config.get('tts_service', '')).lower() == 'cfi':
+            error_msg = ("❌ LLM Coach not configured: CFI Lab API key missing "
+                         "(cfi.api_key or cfi.env_file in config.yaml, or LITELLM_API_KEY)")
         elif not azure_config:
             error_msg = "❌ LLM Coach not configured: No 'azure_openai' section found in config.yaml"
         elif not azure_config.get('api_key') or azure_config.get('api_key') == 'your-azure-openai-api-key-here':

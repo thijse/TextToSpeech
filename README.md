@@ -4,7 +4,7 @@ A flexible Python application and library that converts text in different format
 
 - **Markdown to Speech**: Process markdown documents with a custom dialect that maps sections to separate audio files
 - **PowerPoint to Speech**: Extract PowerPoint notes, convert them to Markdown, and then to speech
-- **Multiple TTS Backends**: Support for both ElevenLabs and Azure Speech Services
+- **Multiple TTS Backends**: Azure neural voices through the CFI Lab (default, needs only a CFI Lab key), Azure Speech Services directly, or ElevenLabs
 - **Phonetics**: If words are not pronounced correctly phonetics can be generated based on voice recording or description via LLM 
 
 ## Setup
@@ -30,17 +30,60 @@ tts --help
 phonetics --help
 ```
 
-3. Install dependencies:
-
-   ```
-   pip install -r requirements.txt
-   ```
-
-4. Configure your TTS services:
-   - Open `config.yaml`
-   - Set your ElevenLabs API key and preferred voice
-   - Set your Azure Speech Service API key, region, and preferred voice
+Then configure your TTS service in `config\config.yaml` (see [Using a CFI Lab key](#using-a-cfi-lab-key)):
+   - `tts_service: "cfi"` (default): only a CFI Lab key is needed
+   - Or set an Azure Speech Service API key and region (`azure`), or an ElevenLabs API key (`elevenlabs`)
    - Configure default output format and quality
+
+## Using a CFI Lab key
+
+With `tts_service: "cfi"` everything goes through the CFI Lab instead of your own Azure resources:
+
+| Feature | CFI Lab model |
+| --- | --- |
+| Speech synthesis (`tts`, phonetics playback) | Azure neural voices (same voice names as Azure, e.g. `en-US-JennyNeural`) |
+| Recording a pronunciation (`phonetics --record`) | `gpt-4o-mini-transcribe` |
+| LLM phonetic coach (`phonetics --coach`) | `gpt-5` |
+
+1. Get a CFI Lab key (it starts with `sk-`). Browse the available models at https://litellm.cfilab.philips.com/ui.
+2. Give the key to the app in one of these ways (first match wins):
+   - In `config\config.yaml`:
+
+     ```yaml
+     tts_service: "cfi"
+     cfi:
+       api_key: "sk-..."  # your CFI Lab key
+     ```
+
+   - As an environment variable (keeps the key out of the config file):
+
+     ```powershell
+     $env:LITELLM_API_KEY = "sk-..."
+     ```
+
+   - In a `.env` file that `cfi.env_file` points to, for example one shared between projects:
+
+     ```yaml
+     cfi:
+       env_file: "D:/Github/shared/.env"
+     ```
+
+     ```ini
+     LITELLM_API_KEY=sk-...
+     SSL_VERIFY=false
+     ```
+
+3. On the Philips network, a TLS-inspecting proxy can cause certificate errors. If so, set `cfi.ssl_verify: false` or `SSL_VERIFY=false`.
+4. Check it works:
+
+   ```powershell
+   tts --service cfi --voices-short
+   tts --service cfi --md examples\phonetic_test.md --overwrite-audio
+   ```
+
+Other `cfi` settings (all optional): `base_url` (default `https://litellm.cfilab.philips.com`), `voice_name`, `voice_list`, `chat_model`, `transcribe_model` and `max_completion_tokens` (default 16000; `gpt-5` needs a large budget for its reasoning). See [config/config.sample.yaml](config/config.sample.yaml).
+
+The CFI Lab has no endpoint that lists voices, so `--voices` and `--voices-short` read [data/azure_voices.txt](data/azure_voices.txt). The Azure Speech SDK is only used with `--service azure`.
 
 ## Usage
 
@@ -55,8 +98,9 @@ The application supports several command-line options:
 1. **Select TTS service**:
 
    ```
+   tts --service cfi         # Use Azure voices through the CFI Lab (CFI Lab key)
    tts --service elevenlabs  # Use ElevenLabs TTS
-   tts --service azure       # Use Azure Speech Service
+   tts --service azure       # Use Azure Speech Service directly
    ```
 
 2. **Process PowerPoint files**:
@@ -208,7 +252,11 @@ tts_client = ElevenLabsTTS(api_key="your_api_key", model_id="eleven_monolingual_
 from tts_azure import AzureTTS
 tts_client = AzureTTS(api_key="your_api_key", region="westus", voice_name="en-US-JennyNeural")
 
-# Both implementations follow the same interface
+# Using Azure voices through the CFI Lab
+from texttospeech.tts.cfi import CfiSpeechTTS
+tts_client = CfiSpeechTTS(api_key="your_cfi_lab_key", voice_name="en-US-JennyNeural")
+
+# All implementations follow the same interface
 voices = tts_client.get_voices()
 for voice in voices.voices:
     print(f"Voice: {voice.name} (ID: {voice.voice_id})")
@@ -220,7 +268,12 @@ All settings are controlled through the `config.yaml` file:
 
 ```yaml
 # Select the default TTS service
-tts_service: "elevenlabs"  # or "azure"
+tts_service: "cfi"  # or "azure", "elevenlabs"
+
+# CFI Lab (Azure voices, transcription and the LLM coach)
+cfi:
+  api_key: "your_cfi_lab_key"  # or LITELLM_API_KEY / env_file
+  voice_name: "en-US-JennyNeural"
 
 # ElevenLabs Configuration
 elevenlabs:
